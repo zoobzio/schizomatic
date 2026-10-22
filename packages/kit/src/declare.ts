@@ -1,4 +1,4 @@
-import type { Contract, Node, SetRef } from "@schizomatic/contract";
+import type { Contract, Node, SetRef } from "@schizomatic/schema";
 
 import { generic, scoped, settle } from "./scope";
 

@@ -174,4 +174,4 @@ const schema = makeService<Kinds<P>>(artifact, { params, handlers });
 ## Related
 
 - [`@schizomatic/core`](../core) makes the service over the artifact.
-- [`@schizomatic/contract`](../contract) is the contract format.
+- [`@schizomatic/schema`](../schema) is the contract format.

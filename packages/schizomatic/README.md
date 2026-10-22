@@ -2,7 +2,7 @@
 
 The umbrella package. It re-exports the runtime of
 [`@schizomatic/core`](../core) and the contract types of
-[`@schizomatic/contract`](../contract).
+[`@schizomatic/schema`](../schema).
 
 ## Install
 

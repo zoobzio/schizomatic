@@ -1,4 +1,4 @@
-import type { Contract } from "@schizomatic/contract";
+import type { Contract } from "@schizomatic/schema";
 
 /**
  * The config of a schizomatic package. `schizomatic.config.ts` exports it.

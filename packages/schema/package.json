@@ -1,10 +1,10 @@
 {
-  "name": "@schizomatic/contract",
+  "name": "@schizomatic/schema",
   "version": "0.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/zoobzio/schizomatic.git",
-    "directory": "packages/contract"
+    "directory": "packages/schema"
   },
   "type": "module",
   "main": "./.dist/index.mjs",

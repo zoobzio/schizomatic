@@ -49,5 +49,5 @@ before it calls `make`. A missing param or a missing handler throws an
 ## Related
 
 - [`@schizomatic/kit`](../kit) builds the artifact from JSON Schema.
-- [`@schizomatic/contract`](../contract) is the contract format that the kit
+- [`@schizomatic/schema`](../schema) is the contract format that the kit
   writes beside the artifact.

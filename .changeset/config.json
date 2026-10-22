@@ -12,7 +12,7 @@
   "fixed": [
     [
       "schizomatic",
-      "@schizomatic/contract",
+      "@schizomatic/schema",
       "@schizomatic/core",
       "@schizomatic/kit",
       "@schizomatic/testing"

@@ -1,4 +1,4 @@
-import type { Contract } from "@schizomatic/contract";
+import type { Contract } from "@schizomatic/schema";
 
 import { ARTIFACT, CONTRACT, DECLARATION } from "./constant";
 import { declaration } from "./declare";

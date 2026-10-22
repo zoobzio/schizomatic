@@ -1,2 +1,2 @@
-export * from "@schizomatic/contract";
+export * from "@schizomatic/schema";
 export * from "@schizomatic/core";

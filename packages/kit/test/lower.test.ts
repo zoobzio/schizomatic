@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { KitError, load, lower, lowerOrThrow } from "../src";
 import type { Document, JsonObject } from "../src";
-import type { Node } from "@schizomatic/contract";
+import type { Node } from "@schizomatic/schema";
 
 const basic = resolve(import.meta.dirname, "fixtures/basic/src/index.json");
 const access = resolve(import.meta.dirname, "fixtures/access/src/index.json");

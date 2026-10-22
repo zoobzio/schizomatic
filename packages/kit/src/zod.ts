@@ -1,4 +1,4 @@
-import type { Contract, Node, SetRef } from "@schizomatic/contract";
+import type { Contract, Node, SetRef } from "@schizomatic/schema";
 
 import { KitError } from "./error";
 import { scoped as scopedNode, settle } from "./scope";

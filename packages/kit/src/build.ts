@@ -1,4 +1,4 @@
-import type { Contract } from "@schizomatic/contract";
+import type { Contract } from "@schizomatic/schema";
 
 import { bundle } from "./bundle";
 import { loadConfig } from "./config";

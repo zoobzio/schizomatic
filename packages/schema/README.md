@@ -1,4 +1,4 @@
-# @schizomatic/contract
+# @schizomatic/schema
 
 The contract format. A contract is a JSON document that a build writes and a
 runtime reads. The package has the node types, the param types, and the
@@ -7,7 +7,7 @@ constants of the format. It has no dependency.
 ## Install
 
 ```sh
-pnpm add @schizomatic/contract
+pnpm add @schizomatic/schema
 ```
 
 ## The contract

@@ -30,7 +30,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@schizomatic/contract": "workspace:*",
+    "@schizomatic/schema": "workspace:*",
     "jiti": "catalog:",
     "rolldown": "catalog:",
     "zod": "catalog:"

@@ -1,4 +1,4 @@
-import type { Contract, Node, SetRef } from "@schizomatic/contract";
+import type { Contract, Node, SetRef } from "@schizomatic/schema";
 
 /**
  * Returns whether a set reference reads the enclosing key.

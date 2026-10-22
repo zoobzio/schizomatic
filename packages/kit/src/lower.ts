@@ -5,8 +5,8 @@ import type {
   Node,
   Param,
   SetRef,
-} from "@schizomatic/contract";
-import { VERSION } from "@schizomatic/contract";
+} from "@schizomatic/schema";
+import { VERSION } from "@schizomatic/schema";
 
 import { DEFS, EXTENSION, FORMAT_MAP, UNSUPPORTED } from "./constant";
 import { KitError } from "./error";

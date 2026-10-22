@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-import type { Contract } from "@schizomatic/contract";
+import type { Contract } from "@schizomatic/schema";
 import { describe, expect, it } from "vitest";
 
 import { KitError, load, lowerOrThrow, zodSource } from "../src";
