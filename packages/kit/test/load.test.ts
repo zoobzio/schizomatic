@@ -1,23 +1,22 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { KitError, load } from "../src";
 
-const basic = resolve(import.meta.dirname, "fixtures/basic/src/index.json");
+const basic = resolve(import.meta.dirname, "fixtures/basic/src");
 
-/** Writes files to a fresh directory and returns the path of the first file. */
+/** Writes files to a fresh source directory and returns its path. */
 const project = (files: Record<string, unknown>): string => {
   const dir = mkdtempSync(join(tmpdir(), "schizomatic-"));
   for (const [name, json] of Object.entries(files)) {
-    writeFileSync(
-      join(dir, name),
-      typeof json === "string" ? json : JSON.stringify(json),
-    );
+    const path = join(dir, name);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, typeof json === "string" ? json : JSON.stringify(json));
   }
-  return join(dir, Object.keys(files)[0] as string);
+  return dir;
 };
 
 /** Returns the problems of the error that `run` throws, or `[]`. */
@@ -33,11 +32,24 @@ const problems = (run: () => unknown): string[] => {
   }
 };
 
+/** Strips the directory from each problem. */
+const bare = (dir: string, found: string[]): string[] =>
+  found.map((problem) => problem.replaceAll(`${dir}/`, ""));
+
 describe("load", () => {
-  it("inlines file references and hoists every $defs to the root", () => {
-    const doc = load(basic);
-    const defs = doc.$defs as Record<string, Record<string, unknown>>;
-    expect(Object.keys(defs).sort()).toEqual([
+  const loaded = load(basic, "basic");
+
+  it("names each file by its path and hoists every def", () => {
+    expect(loaded.id).toBe("basic");
+    expect(loaded.schemas).toEqual([
+      "audit/log",
+      "event",
+      "page",
+      "tree",
+      "user",
+    ]);
+    expect(Object.keys(loaded.defs).sort()).toEqual([
+      "audit/log",
       "created",
       "event",
       "page",
@@ -45,88 +57,179 @@ describe("load", () => {
       "tree",
       "user",
     ]);
-    expect(defs.user?.type).toBe("object");
-    expect(defs.user?.title).toBe("User");
-    expect(defs.user?.$defs).toBeUndefined();
-    expect(defs.role).toEqual({ enum: ["admin", "member"] });
+    expect(loaded.defs.role).toEqual({ enum: ["admin", "member"] });
   });
 
-  it("rewrites a file fragment reference to a root reference", () => {
-    const doc = load(basic);
-    const page = (doc.$defs as Record<string, Record<string, unknown>>)
-      .page as Record<string, Record<string, Record<string, unknown>>>;
-    expect(page.properties?.items?.items).toEqual({ $ref: "#/$defs/role" });
+  it("drops the file keywords and reads the check", () => {
+    expect(loaded.defs.user?.$schema).toBeUndefined();
+    expect(loaded.defs.user?.$defs).toBeUndefined();
+    expect(loaded.defs.user?.title).toBe("User");
+    expect(loaded.checks).toEqual({ "audit/log": "sorted" });
+    expect(loaded.defs["audit/log"]?.["x-schizomatic"]).toBeUndefined();
   });
 
-  it("lets a sibling keyword replace the one of the file", () => {
-    const path = project({
-      "root.json": { $defs: { a: { $ref: "./a.json", description: "Mine" } } },
-      "a.json": { type: "string", description: "Theirs" },
+  it("rewrites each form of $ref into the global defs", () => {
+    const page = loaded.defs.page as {
+      properties: { items: { items: unknown } };
+    };
+    expect(page.properties.items.items).toEqual({ $ref: "#/$defs/role" });
+    const created = loaded.defs.created as {
+      properties: { user: unknown };
+    };
+    expect(created.properties.user).toEqual({ $ref: "#/$defs/user" });
+    const tree = loaded.defs.tree as {
+      properties: { children: { items: unknown } };
+    };
+    expect(tree.properties.children.items).toEqual({ $ref: "#/$defs/tree" });
+    const log = loaded.defs["audit/log"] as {
+      properties: { actor: unknown };
+    };
+    expect(log.properties.actor).toEqual({ $ref: "#/$defs/user" });
+  });
+
+  it("encodes a nested path in a $ref", () => {
+    const dir = project({
+      "audit/log.json": { type: "string" },
+      "list.json": { type: "array", items: { $ref: "./audit/log.json" } },
     });
-    const doc = load(path);
-    expect((doc.$defs as Record<string, unknown>).a).toEqual({
-      type: "string",
-      description: "Mine",
+    const found = load(dir, "t");
+    expect(found.defs.list).toEqual({
+      type: "array",
+      items: { $ref: "#/$defs/audit~1log" },
     });
   });
 
-  it("resolves a reference relative to the file that holds it", () => {
-    const path = project({
-      "root.json": { $defs: { a: { $ref: "./a.json" } } },
-      "a.json": { type: "object", properties: { b: { $ref: "./b.json" } } },
-      "b.json": { type: "number" },
+  it("keeps a ref inside instance data as it is", () => {
+    const dir = project({
+      "a.json": { type: "object", default: { $ref: "x" } },
     });
-    const doc = load(path);
-    const a = (
-      doc.$defs as Record<string, Record<string, Record<string, unknown>>>
-    ).a;
-    expect(a?.properties?.b).toEqual({ type: "number" });
+    expect(load(dir, "t").defs.a).toEqual({
+      type: "object",
+      default: { $ref: "x" },
+    });
   });
 
-  it("reports two files that define the same def", () => {
-    const path = project({
-      "root.json": {
-        $defs: { a: { $ref: "./a.json" }, x: { type: "string" } },
+  it("reports a source that is not a directory", () => {
+    const file = join(project({ "a.json": {} }), "a.json");
+    expect(problems(() => load(file, "t"))).toEqual([
+      `${file}: the source must be a directory`,
+    ]);
+  });
+
+  it("reports an empty source, bad JSON, and a file that is not an object", () => {
+    const empty = project({});
+    expect(problems(() => load(empty, "t"))).toEqual([
+      `${empty}: the source has no .json file`,
+    ]);
+    const dir = project({ "a.json": "{", "b.json": [1] });
+    expect(
+      bare(
+        dir,
+        problems(() => load(dir, "t")),
+      ),
+    ).toEqual([
+      expect.stringMatching(/^a\.json: /),
+      "b.json: the file must hold a schema object",
+    ]);
+  });
+
+  it("reports each form of $ref that does not resolve", () => {
+    const dir = project({
+      "a.json": {
+        anyOf: [
+          { $ref: "#/properties/x" },
+          { $ref: "#/$defs/missing" },
+          { $ref: "https://example.com/x.json" },
+          { $ref: "./missing.json" },
+          { $ref: "./b.json#/properties/x" },
+          { $ref: "./b.json#/$defs/missing" },
+        ],
       },
-      "a.json": { type: "string", $defs: { x: { type: "number" } } },
+      "b.json": { type: "string" },
     });
-    const found = problems(() => load(path));
-    expect(found).toHaveLength(1);
-    expect(found[0]).toMatch(/the def "x" is also defined in/);
+    expect(
+      bare(
+        dir,
+        problems(() => load(dir, "t")),
+      ),
+    ).toEqual([
+      'a.json#/anyOf/0: $ref "#/properties/x" must point into $defs',
+      'a.json#/anyOf/1: $ref "#/$defs/missing" names no def of the file',
+      'a.json#/anyOf/2: $ref "https://example.com/x.json" must be a relative path or point into $defs',
+      'a.json#/anyOf/3: $ref "./missing.json" names no file of the source',
+      'a.json#/anyOf/4: $ref "./b.json#/properties/x" must point into $defs',
+      'a.json#/anyOf/5: $ref "./b.json#/$defs/missing" names no def of b.json',
+    ]);
   });
 
-  it("reports a file that references itself as a whole", () => {
-    const path = project({
-      "root.json": { $defs: { a: { $ref: "./a.json" } } },
-      "a.json": { type: "object", properties: { next: { $ref: "./a.json" } } },
+  it("reports a name that two files use", () => {
+    const dir = project({
+      "a.json": { $defs: { shared: {}, b: {} } },
+      "b.json": { $defs: { shared: {} } },
     });
-    expect(problems(() => load(path))[0]).toMatch(/references itself/);
+    expect(
+      bare(
+        dir,
+        problems(() => load(dir, "t")),
+      ),
+    ).toEqual([
+      'b.json: the name "b" is also used by a.json',
+      'b.json: the name "shared" is also used by a.json',
+    ]);
   });
 
-  it("reports a missing file and bad JSON with the path", () => {
-    const path = project({
-      "root.json": {
-        $defs: { a: { $ref: "./missing.json" }, b: { $ref: "./bad.json" } },
+  it("reports two names that make the same type name", () => {
+    const dir = project({
+      "audit-log.json": {},
+      "audit/log.json": {},
+    });
+    expect(
+      bare(
+        dir,
+        problems(() => load(dir, "t")),
+      ),
+    ).toEqual([
+      'audit/log.json: "audit/log" and "audit-log" make the same type name AuditLog',
+    ]);
+  });
+
+  it("reports a file that is also a directory", () => {
+    const dir = project({ "audit.json": {}, "audit/log.json": {} });
+    expect(
+      bare(
+        dir,
+        problems(() => load(dir, "t")),
+      ),
+    ).toEqual(["audit.json: audit is both a schema and a directory"]);
+  });
+
+  it("reports a bad extension", () => {
+    const dir = project({
+      "a.json": {
+        type: "object",
+        properties: {
+          x: { type: "string", "x-schizomatic": { check: "inner", ts: 1 } },
+        },
+        "x-schizomatic": { check: "", other: true },
       },
-      "bad.json": "{ not json",
+      "b.json": { "x-schizomatic": [] },
     });
-    const found = problems(() => load(path));
-    expect(found).toHaveLength(2);
-    expect(found[0]).toMatch(/missing\.json: the file could not be read/);
-    expect(found[1]).toMatch(/bad\.json: /);
+    expect(
+      bare(
+        dir,
+        problems(() => load(dir, "t")),
+      ),
+    ).toEqual([
+      "a.json#: check must name a handler",
+      "a.json#: x-schizomatic.other is not one of check, ts",
+      "a.json#/properties/x: check is allowed at the root of a file only",
+      "a.json#/properties/x: ts must be a type",
+      "b.json#: x-schizomatic must be an object",
+    ]);
   });
 
-  it("reports a $ref that does not point into $defs", () => {
-    const path = project({
-      "root.json": { $defs: { a: { $ref: "#/properties/x" } } },
-    });
-    expect(problems(() => load(path))[0]).toMatch(/must point into \$defs/);
-  });
-
-  it("reports a root that is not an object", () => {
-    const path = project({ "root.json": [] });
-    expect(problems(() => load(path))[0]).toMatch(
-      /the root must be a schema object/,
-    );
+  it("skips a dotfile", () => {
+    const dir = project({ "a.json": {}, ".b.json": "{", ".hidden/c.json": {} });
+    expect(load(dir, "t").schemas).toEqual(["a"]);
   });
 });

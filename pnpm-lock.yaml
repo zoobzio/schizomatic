@@ -30,9 +30,6 @@ catalogs:
     oxlint:
       specifier: ^1.86.0
       version: 1.89.0
-    rolldown:
-      specifier: ^1.2.15
-      version: 1.2.15
     turbo:
       specifier: ^2.11.7
       version: 2.11.10
@@ -83,25 +80,15 @@ importers:
 
   packages/core:
     dependencies:
-      '@schizomatic/schema':
-        specifier: workspace:*
-        version: link:../schema
-    devDependencies:
       zod:
         specifier: 'catalog:'
         version: 4.6.7
 
   packages/kit:
     dependencies:
-      '@schizomatic/schema':
-        specifier: workspace:*
-        version: link:../schema
       jiti:
         specifier: 'catalog:'
         version: 2.7.0
-      rolldown:
-        specifier: 'catalog:'
-        version: 1.2.15
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -113,29 +100,11 @@ importers:
         specifier: 'catalog:'
         version: 25.9.9
 
-  packages/schema: {}
-
   packages/schizomatic:
     dependencies:
       '@schizomatic/core':
         specifier: workspace:*
         version: link:../core
-      '@schizomatic/schema':
-        specifier: workspace:*
-        version: link:../schema
-
-  packages/testing:
-    dependencies:
-      '@schizomatic/kit':
-        specifier: workspace:*
-        version: link:../kit
-      schizomatic:
-        specifier: workspace:*
-        version: link:../schizomatic
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 25.9.9
 
 packages:
 

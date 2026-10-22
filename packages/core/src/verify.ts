@@ -1,41 +1,35 @@
 import type { Artifact, Options } from "./types";
 
-import { ArtifactError } from "./error";
-
 /**
- * Checks the options against what the artifact declares. Each declared param
- * must be bound. Each declared handler must be supplied. A param or a handler
- * that the artifact does not declare is a problem too, as it is a sign of a
- * mismatch between the build and the service. The function throws an
- * {@link ArtifactError} with every problem.
+ * Checks the options against the artifact. Each check of the artifact must
+ * name a schema. Each handler that a check names must be supplied. A handler
+ * that no check names is a problem too, as it is a sign of a mismatch between
+ * the build and the service. The function returns every problem.
+ *
+ * @param artifact - The built artifact.
+ * @param options - The options of the service.
  */
-export const verify = (artifact: Artifact, options: Options): void => {
+export const verify = (artifact: Artifact, options: Options): string[] => {
   const problems: string[] = [];
-  const params = options.params ?? {};
   const handlers = options.handlers ?? {};
+  const schemas = new Set(artifact.schemas);
+  const named = new Set<string>();
 
-  for (const name of artifact.params) {
-    if (!Object.hasOwn(params, name)) {
-      problems.push(`params.${name} is required`);
+  for (const [path, name] of Object.entries(artifact.checks)) {
+    named.add(name);
+    if (!schemas.has(path)) {
+      problems.push(`checks.${path} names no schema of the artifact`);
     }
   }
-  for (const name of Object.keys(params)) {
-    if (!artifact.params.includes(name)) {
-      problems.push(`params.${name} is not a param of the artifact`);
-    }
-  }
-  for (const name of artifact.handlers) {
+  for (const name of named) {
     if (typeof handlers[name] !== "function") {
       problems.push(`handlers.${name} is required`);
     }
   }
   for (const name of Object.keys(handlers)) {
-    if (!artifact.handlers.includes(name)) {
-      problems.push(`handlers.${name} is not a handler of the artifact`);
+    if (!named.has(name)) {
+      problems.push(`handlers.${name} is not a check of the artifact`);
     }
   }
-
-  if (problems.length > 0) {
-    throw new ArtifactError(artifact.id, problems);
-  }
+  return problems;
 };

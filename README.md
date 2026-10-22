@@ -1,22 +1,14 @@
 # schizomatic
 
-schizomatic builds typed validators from JSON Schema. The source of a package
-is `schizomatic.config.ts` and a set of JSON Schema documents. The build
-derives three things from the documents: a **contract**, a **validator
-module**, and **declarations**.
+schizomatic builds typed validators from a directory of JSON Schema documents.
+Each file is one schema. The path of the file is the path of its validator:
+`src/audit/event.json` becomes `schema.audit.event`, with `check`, `assert`,
+`parse`, and `inspect`, and the type `AuditEvent`.
 
-- The contract is a compact JSON document. It is the only thing that crosses
-  from the build to a runtime service.
-- The validator module runs the contract over the atoms of
-  [`@schizomatic/core`](./packages/core). A service that imports it has no
-  dependency on zod or on any schema library.
-- The declarations are flat types written out from the contract. A consumer
-  that imports a type gets one object literal type, not an inferred tree.
-
-A contract can declare **params**: named sets and maps that a service binds at
-boot. A rule that reads a param resolves when the service starts. This is how
-a schema parameterized by data, such as a set of role names that only the app
-knows, becomes one artifact with generic types.
+[zod](https://zod.dev) does the validation. The runtime hands each document
+to `z.fromJSONSchema` when the service starts. The build proves ahead of time
+that zod can read each document, and prints the types. Nothing else is
+invented here.
 
 ## Anatomy
 
@@ -24,17 +16,18 @@ knows, becomes one artifact with generic types.
 my-schema/
   schizomatic.config.ts
   src/
-    index.json        # kinds, params, $ref to the parts
-    user.json
-    page.json
-  .dist/              # built: contract.json  index.mjs  index.d.mts
+    user.json         # schema.user, type User
+    page.json         # schema.page, type Page
+    audit/
+      event.json      # schema.audit.event, type AuditEvent
+  .dist/              # built: index.mjs  index.d.mts
 ```
 
 ```ts
 // schizomatic.config.ts
 import { defineConfig } from "@schizomatic/kit";
 
-export default defineConfig({ source: "./src/index.json" });
+export default defineConfig({});
 ```
 
 ```sh
@@ -42,18 +35,28 @@ schizomatic build
 ```
 
 ```ts
-import schema, { type User } from "./.dist/index.mjs";
+import { makeService } from "@schizomatic/core";
 
-schema.check.user(value); // value is User
-schema.parse.user(value); // returns User, throws SchemaError
+import artifact, { type Schema, type User } from "./.dist/index.mjs";
+
+const schema: Schema = makeService(artifact);
+
+schema.user.check(value); // value is User
+schema.user.parse(value); // returns User, throws SchemaError
+schema.audit.event.inspect(value); // { success, data } or { success, issues }
 ```
+
+A file can point to another with `$ref: "./user.json"`, or to a def of one
+with `$ref: "./user.json#/$defs/role"`. A file can declare a **check**, a
+named handler that the service binds at boot, for a rule that JSON Schema
+cannot say. The declaration types each handler by the schema it checks.
 
 ## Workspace
 
-| Directory                | Contents                                        |
-| ------------------------ | ----------------------------------------------- |
-| [`packages`](./packages) | The contract, the runtime, the kit, and testing |
-| [`examples`](./examples) | Example schema packages and consumers           |
+| Directory                | Contents                              |
+| ------------------------ | ------------------------------------- |
+| [`packages`](./packages) | The runtime and the kit               |
+| [`examples`](./examples) | Example schema packages and consumers |
 
 ## Development
 

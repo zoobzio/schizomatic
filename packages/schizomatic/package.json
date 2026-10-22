@@ -26,7 +26,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@schizomatic/schema": "workspace:*",
     "@schizomatic/core": "workspace:*"
   }
 }

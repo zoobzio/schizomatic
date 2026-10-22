@@ -30,9 +30,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@schizomatic/schema": "workspace:*",
     "jiti": "catalog:",
-    "rolldown": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

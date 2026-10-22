@@ -4,9 +4,9 @@ import { build } from "./build";
 
 const HELP = `Usage: schizomatic build [options]
 
-Builds the schema schizomatic.config.ts points at: reads the JSON Schema
-documents and writes the contract, the artifact, and the declarations to
-the output directory.
+Builds the schema schizomatic.config.ts points at: reads every JSON Schema
+document under the source directory, proves each one with zod, and writes
+the artifact and the declarations to the output directory.
 
 Options:
   -c, --config <file>  Config file (default: schizomatic.config.ts)

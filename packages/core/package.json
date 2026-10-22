@@ -26,9 +26,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@schizomatic/schema": "workspace:*"
-  },
-  "devDependencies": {
     "zod": "catalog:"
   }
 }

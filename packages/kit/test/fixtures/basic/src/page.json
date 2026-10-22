@@ -1,4 +1,5 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
     "items": {
@@ -9,7 +10,8 @@
     "span": {
       "type": "array",
       "prefixItems": [{ "type": "number" }, { "type": "number" }],
-      "items": false
+      "items": false,
+      "minItems": 2
     },
     "meta": {
       "type": "object",
@@ -23,8 +25,7 @@
     },
     "loose": {
       "type": "object",
-      "properties": { "a": { "type": "boolean" } },
-      "additionalProperties": true
+      "properties": { "a": { "type": "boolean" } }
     },
     "both": {
       "allOf": [

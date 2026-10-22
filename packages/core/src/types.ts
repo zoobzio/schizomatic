@@ -1,114 +1,76 @@
-/**
- * A validation failure. The shape follows the issue of zod: a `code`, a
- * `path` from the root to the failure, and a readable `message`. The built
- * artifact produces the issues. The service passes them through.
- */
-export type Issue = {
-  code: string;
-  message: string;
-  path: PropertyKey[];
-};
+import type { z } from "zod";
 
 /**
- * The outcome of a parse by the artifact. The shape follows `safeParse` of
- * zod. The service reads `success`, `data`, and `error.issues`. It reads no
- * other member.
+ * A JSON Schema document as the artifact holds it. A document is plain JSON.
  */
-export type Parsed =
-  | { success: true; data: unknown }
-  | { success: false; error: { issues: Issue[] } };
+export type Document = { readonly [key: string]: unknown };
 
 /**
- * A compiled validator of one kind. The artifact makes one for each kind.
- * The service calls `safeParse` and nothing else. A zod schema satisfies
- * this type, so a hand-written zod schema can stand in for an artifact in a
- * test.
+ * A validation failure, as zod reports it. The service passes the issues of
+ * zod through without change.
  */
-export type Validator = {
-  safeParse: (v: unknown) => Parsed;
-};
+export type Issue = z.core.$ZodIssue;
 
 /**
- * A handler for a named check of the contract. The artifact calls the handler
- * inside a zod `check`. The handler returns `undefined` for a valid value and
- * a message for an invalid value, with the path relative to the value.
+ * One failure that a handler reports. `path` is relative to the value that
+ * the handler received.
  */
-export type Handler = (
-  v: unknown,
-) => { message: string; path?: PropertyKey[] } | undefined;
+export type Problem = { message: string; path?: PropertyKey[] };
 
 /**
- * The values that a service binds to the params of a contract. A `set` param
- * takes a list of names. A `map` param takes a record from each name of its
- * key set to a list of names or to one enum value.
+ * A named check over a schema. The service runs the handler after zod
+ * accepts the value, so the handler receives the parsed output. The handler
+ * returns nothing for a valid value, or one problem or a list of problems.
  */
-export type Params = Record<
-  string,
-  readonly string[] | Record<string, readonly string[] | string>
->;
+export type Handler<V = unknown> = (v: V) => Problem | Problem[] | undefined;
 
 /**
- * The built artifact. The kit writes it as `index.mjs`. `make` builds the
- * validators from the params and the handlers. The artifact carries its own
- * copy of zod, so the service has no dependency on zod.
+ * The handlers of an artifact, by name. The declaration of a built schema
+ * types each handler by the schema it checks. A handler of any value fits a
+ * map of handlers of no value, which is what the service holds.
  */
-export type Artifact = {
-  id: string;
-  kinds: readonly string[];
-  params: readonly string[];
-  handlers: readonly string[];
-  make: (
-    params: Params,
-    handlers: Record<string, Handler>,
-  ) => Record<string, Validator>;
-};
+export type Handlers = { readonly [name: string]: Handler<never> };
 
 /**
- * The options of a service. `params` binds the params of the contract.
- * `handlers` supplies a function for each named check.
- */
-export type Options = {
-  params?: Params;
-  handlers?: Record<string, Handler>;
-};
-
-/**
- * The outcome of an `inspect`. A success result holds the value narrowed to
- * the type of the kind. A failure result holds the issues.
+ * The outcome of an `inspect`. A success result holds the output narrowed to
+ * the type of the schema. A failure result holds the issues.
  */
 export type Result<V> =
   | { success: true; data: V }
   | { success: false; issues: Issue[] };
 
 /**
- * A boolean type predicate for each kind.
+ * The four functions over one schema. `check` is a type predicate. `assert`
+ * throws a `SchemaError` with every issue. `parse` returns the output, with
+ * the defaults filled. `inspect` returns a {@link Result}.
  */
-export type Check<K> = { [N in keyof K]: (v: unknown) => v is K[N] };
-
-/**
- * An assertion for each kind. A failed assertion throws a `SchemaError`.
- */
-export type Assert<K> = { [N in keyof K]: (v: unknown) => asserts v is K[N] };
-
-/**
- * A parse for each kind. The function returns the output value narrowed to
- * its kind. The output has the defaults filled and the stripped keys removed.
- */
-export type Parse<K> = { [N in keyof K]: (v: unknown) => K[N] };
-
-/**
- * An inspect for each kind. The function returns a {@link Result}.
- */
-export type Inspect<K> = { [N in keyof K]: (v: unknown) => Result<K[N]> };
-
-/**
- * The service over an artifact. `K` maps each kind to the type it narrows
- * to. The kit writes `K` in the declarations of a built schema.
- */
-export type Service<K> = {
-  id: string;
-  check: Check<K>;
-  assert: Assert<K>;
-  parse: Parse<K>;
-  inspect: Inspect<K>;
+export type Validator<V> = {
+  check: (v: unknown) => v is V;
+  assert: (v: unknown) => asserts v is V;
+  parse: (v: unknown) => V;
+  inspect: (v: unknown) => Result<V>;
 };
+
+/**
+ * The built artifact. The kit writes it as `index.mjs`. `defs` holds every
+ * schema and every def of the source by name. `schemas` lists the paths that
+ * become validators, such as `audit/event`. `checks` names the handler of
+ * each schema that has one.
+ *
+ * `S` is the type of the service: the validators by path. `H` is the type of
+ * the handlers. The declaration of a built schema sets both. They are never
+ * present at runtime.
+ */
+export type Artifact<S = unknown, H extends Handlers = Handlers> = {
+  readonly id: string;
+  readonly schemas: readonly string[];
+  readonly checks: { readonly [path: string]: string };
+  readonly defs: { readonly [name: string]: Document };
+  readonly types?: { schema: S; handlers: H };
+};
+
+/**
+ * The options of a service. `handlers` supplies a function for each check
+ * of the artifact.
+ */
+export type Options<H extends Handlers = Handlers> = { handlers?: H };

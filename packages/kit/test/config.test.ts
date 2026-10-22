@@ -6,6 +6,7 @@ import {
   CONFIG_FILE,
   KitError,
   OUT_DIR,
+  SOURCE,
   defineConfig,
   loadConfig,
   resolveConfig,
@@ -28,40 +29,44 @@ const problems = (run: () => unknown): string[] => {
 
 describe("defineConfig", () => {
   it("returns the config as it is", () => {
-    const config = { source: "./src/index.json" };
+    const config = { source: "./schema" };
     expect(defineConfig(config)).toBe(config);
   });
 
   it("names the defaults", () => {
     expect(CONFIG_FILE).toBe("schizomatic.config.ts");
+    expect(SOURCE).toBe("./src");
     expect(OUT_DIR).toBe(".dist");
   });
 });
 
 describe("resolveConfig", () => {
   it("fills the defaults and makes the paths absolute", () => {
-    const found = resolveConfig({ source: "./src/index.json" }, root);
-    expect(found).toEqual({
+    expect(resolveConfig({}, root)).toEqual({
       root,
-      source: resolve(root, "src/index.json"),
+      source: resolve(root, "src"),
+      id: "basic",
       outDir: resolve(root, ".dist"),
     });
   });
 
-  it("keeps the id and the outDir", () => {
+  it("keeps the source, the id, and the outDir", () => {
     const found = resolveConfig(
-      { source: "./src/index.json", id: "app", outDir: "out" },
+      { source: "./schema", id: "app", outDir: "out" },
       root,
     );
+    expect(found.source).toBe(resolve(root, "schema"));
     expect(found.id).toBe("app");
     expect(found.outDir).toBe(resolve(root, "out"));
   });
 
   it("reports every problem together", () => {
     expect(
-      problems(() => resolveConfig({ id: "", outDir: "../out" }, root)),
+      problems(() =>
+        resolveConfig({ source: "", id: "", outDir: "../out" }, root),
+      ),
     ).toEqual([
-      "source must be a path to the root JSON Schema document",
+      "source must be a path to the source directory",
       "id must be a non-empty string",
       'outDir "../out" must be a subdirectory of the project root',
     ]);
@@ -72,24 +77,18 @@ describe("resolveConfig", () => {
       "the config must be an object",
     ]);
   });
-
-  it("rejects the root as outDir", () => {
-    expect(
-      problems(() => resolveConfig({ source: "a.json", outDir: "." }, root)),
-    ).toHaveLength(1);
-  });
 });
 
 describe("loadConfig", () => {
   it("loads the config file of a project", async () => {
     const found = await loadConfig({ root });
-    expect(found.source).toBe(resolve(root, "src/index.json"));
+    expect(found.source).toBe(resolve(root, "src"));
     expect(found.outDir).toBe(resolve(root, ".generated"));
   });
 
-  it("reports a missing config file", async () => {
-    await expect(
-      loadConfig({ root, config: "missing.config.ts" }),
-    ).rejects.toThrow(/the config could not be loaded/);
+  it("reports a config that cannot be loaded", async () => {
+    await expect(loadConfig({ root, config: "missing.ts" })).rejects.toThrow(
+      KitError,
+    );
   });
 });

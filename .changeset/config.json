@@ -9,15 +9,7 @@
   "commit": false,
   "access": "public",
   "baseBranch": "main",
-  "fixed": [
-    [
-      "schizomatic",
-      "@schizomatic/schema",
-      "@schizomatic/core",
-      "@schizomatic/kit",
-      "@schizomatic/testing"
-    ]
-  ],
+  "fixed": [["schizomatic", "@schizomatic/core", "@schizomatic/kit"]],
   "linked": [],
   "updateInternalDependencies": "patch",
   "ignore": []

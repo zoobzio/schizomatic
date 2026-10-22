@@ -1,19 +1,21 @@
 # @schizomatic/kit
 
-The kit reads JSON Schema documents and writes an artifact for a runtime
-service. The input is a root document and the documents that it references
-with `$ref`. A `schizomatic.config.ts` file points at the root document.
+The kit reads a directory of JSON Schema documents and writes an artifact for
+the runtime service. Each file is one schema. The path of the file is the
+path of its validator in the service: `src/audit/event.json` becomes
+`schema.audit.event`.
 
-The kit writes three files:
+The kit writes two files:
 
-- **`contract.json`** is the contract: the compact form of the documents, for
-  tooling.
-- **`index.mjs`** is the artifact. The kit prints zod source from the contract
-  and bundles it with `zod/mini` inlined. The artifact imports nothing. A
-  service that imports it has no dependency on zod.
-- **`index.d.mts`** is the declaration of the artifact. Each def is a flat
-  type written out from the contract. A consumer that imports a type gets one
-  object literal type, not an inferred tree.
+- **`index.mjs`** is the artifact: the documents as data. The artifact
+  imports nothing. [`@schizomatic/core`](../core) builds each document with
+  `z.fromJSONSchema` of zod when the service starts.
+- **`index.d.mts`** is the declaration of the artifact. Each schema and each
+  def is an exported type, written out flat. `Schema` is the type of the
+  service. `Handlers` types each handler by the schema it checks.
+
+zod does the validation. The kit proves at build time that zod can build
+each document, and prints the types. That is all it does.
 
 ## Install
 
@@ -27,10 +29,10 @@ pnpm add -D @schizomatic/kit
 import { defineConfig } from "@schizomatic/kit";
 
 export default defineConfig({
-  // Required. The root JSON Schema document.
-  source: "./src/index.json",
+  // Optional. The source directory. The default is `./src`.
+  source: "./src",
 
-  // Optional. The identity of the contract. The default is the $id of the root.
+  // Optional. The identity of the artifact. The default is the name of the project directory.
   id: "app",
 
   // Optional. The output directory. The default is `.dist`.
@@ -42,136 +44,76 @@ export default defineConfig({
 schizomatic build
 ```
 
-## The root document
+## The source
 
-The root document is JSON Schema 2020-12. Its `$defs` are the defs of the
-contract. The `x-schizomatic` key of the root names the **kinds** and declares
-the **params**.
+Every `.json` file under the source is a schema. A file or a directory whose
+name starts with a dot is skipped.
 
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "app",
-  "x-schizomatic": {
-    "kinds": { "user": "user", "page": "page" }
-  },
-  "$defs": {
-    "user": { "$ref": "./user.json" },
-    "page": { "$ref": "./page.json" }
-  }
-}
+```
+src/
+  user.json          # schema.user, type User
+  page.json          # schema.page, type Page
+  audit/
+    event.json       # schema.audit.event, type AuditEvent
 ```
 
-A `$ref` has three forms:
+A file is JSON Schema 2020-12. Its `$defs` are its private parts. A `$ref`
+has three forms:
 
-- `#/$defs/name` points to a def.
-- `./file.json` inlines the file. The `$defs` of the file hoist to the root.
-- `./file.json#/$defs/name` loads the file for its `$defs` and points to the
-  def.
+- `#/$defs/name` points to a def of the same file.
+- `./file.json` points to another file. `../` walks up. A file can point to
+  itself this way for a recursive schema.
+- `./file.json#/$defs/name` points to a def of another file.
 
-Every def name is global. Two files that define the same name fail the build.
+Every name is global in the artifact. Two files that define the same def, a
+def with the name of a file, and two names that make the same type name each
+fail the build.
 
 ## Keywords
 
-The kit maps these keywords. Any other keyword fails the build with its path.
+The kit hands each document to `z.fromJSONSchema`. What zod reads, the
+service checks. That is the keywords of 2020-12 that zod supports, including
+`$ref`, `prefixItems`, `patternProperties`, `propertyNames`, `contains`,
+`dependentRequired`, `uniqueItems`, and `default`. zod rejects `not`,
+`if`/`then`/`else`, `dependentSchemas`, `unevaluatedItems`, and
+`unevaluatedProperties`. A document that zod cannot build fails the build,
+with the path and the reason zod gives.
 
-| JSON Schema                                                                 | Artifact                                                            |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `type: string`, `minLength`, `maxLength`, `pattern`, `format`               | `z.string()` with checks                                            |
-| `format: email`, `uuid`, `uri`, `url`, `date-time`, `date`                  | `z.email()`, `z.uuid()`, …                                          |
-| `type: number`, `integer`, `minimum`, `maximum`, `exclusive*`, `multipleOf` | `z.number()`, `z.int()` with checks                                 |
-| `type: boolean`, `null`, `true`                                             | `z.boolean()`, `z.null()`, `z.unknown()`                            |
-| `const`, `enum`                                                             | `z.literal()`, `z.enum()`                                           |
-| `type: array`, `items`, `minItems`, `maxItems`, `uniqueItems`               | `z.array()` with checks                                             |
-| `prefixItems`, `items`                                                      | `z.tuple()`                                                         |
-| `type: object`, `properties`, `required`, `additionalProperties`            | `z.object()`, `z.strictObject()`, `z.looseObject()`, `z.catchall()` |
-| `additionalProperties` alone                                                | `z.record()`                                                        |
-| `propertyNames`                                                             | a check on each key                                                 |
-| `anyOf`, `oneOf`                                                            | `z.union()`                                                         |
-| `allOf`                                                                     | `z.intersection()`                                                  |
-| `type: ["string", "null"]`                                                  | `z.nullable()`                                                      |
-| `default`                                                                   | `z._default()`                                                      |
-| `description`                                                               | JSDoc in the declaration                                            |
+The semantics are those of JSON Schema. An object admits a key it does not
+declare unless `additionalProperties` is `false`. An item of a tuple past
+`minItems` is optional. A `default` fills the output of `parse`.
 
-An object with `properties` strips the keys it does not declare, as zod does.
-`additionalProperties: false` rejects them. `additionalProperties: true`
-keeps them.
+The declaration follows the same rules. A property with a `default` is not
+optional in the type. `additionalProperties` and `patternProperties` print as
+an index signature. `description` prints as JSDoc.
 
 ## The extension
 
 The `x-schizomatic` key of a schema adds what JSON Schema cannot say.
 
-```json
-{ "type": "string", "x-schizomatic": { "ts": "`#${string}`" } }
-```
-
-- **`ts`** replaces the printed type of the node.
-- **`discriminator`** on a `oneOf` names the tag. Each option sets a `const`
-  at the tag. The artifact uses `z.discriminatedUnion()`.
-- **`check`** names a handler. The service supplies the handler at boot. The
-  artifact runs it as a zod check.
-
-## Params
-
-A param is a set or a map that the service binds at boot. A schema that reads
-a param resolves when `make` runs. This is how a schema parameterized by
-data, such as the role names of an app, becomes one artifact with generic
-types.
+- **`check`** names a handler. It is allowed at the root of a file only. The
+  service supplies the handler at boot and runs it after zod accepts the
+  value. A rule that reads across a value, such as a graph with no cycle,
+  lives in a handler.
+- **`ts`** replaces the printed type of the schema.
 
 ```json
 {
-  "x-schizomatic": {
-    "params": {
-      "roles": { "kind": "set" },
-      "resources": { "kind": "set" },
-      "actions": { "kind": "map", "keys": "resources", "of": "set" },
-      "owner": {
-        "kind": "map",
-        "keys": "roles",
-        "of": "enum",
-        "values": ["person", "service"]
-      }
-    }
-  }
+  "type": "string",
+  "pattern": "^<(admin|viewer)>$",
+  "x-schizomatic": { "ts": "`<${Role}>`" }
 }
 ```
 
-A schema reads a param with these extension members:
-
-- **`member`** on a string. The value must be in the set. `slice: [1, -1]`
-  looks up the inner part of `{name}`. `typed: { param, equals }` requires
-  the map to give that value for the name.
-- **`keys`** on an object. `subset`, `superset`, or `exact` names the set
-  that the keys must relate to.
-- **`exhaustive`** on an array. The items must cover the set.
-- **`valueBy`** on an object. `param` names a map of enum values. `schemas`
-  gives the value schema for each enum value. The value at a key uses the
-  schema for the map value of the key.
-
-A set reference is a set param name, or `{ "param": "actions", "at": "$key" }`
-to index a map of sets by the key of the enclosing entry. A def that reads
-`$key` becomes a factory of the key in the artifact and takes `K extends
-string` in the declaration.
-
-The declaration exports `Params`. Narrow each member to its union to type a
-service:
+The artifact holds neither member. The declaration types each handler by the
+schema it checks:
 
 ```ts
-import { makeService } from "@schizomatic/core";
-
-import artifact, { type Kinds } from "./schema/index.mjs";
-
-type P = {
-  roles: "admin" | "viewer";
-  resources: "doc";
-  actions: { doc: "read" | "write" };
-  owner: Record<string, string>;
+export type Handlers = {
+  noSelfGrant: Handler<Bindings>;
 };
-
-const schema = makeService<Kinds<P>>(artifact, { params, handlers });
 ```
 
 ## Related
 
 - [`@schizomatic/core`](../core) makes the service over the artifact.
-- [`@schizomatic/schema`](../schema) is the contract format.

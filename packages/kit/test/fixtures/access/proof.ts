@@ -1,11 +1,16 @@
 /* Type proof for the access fixture. The build test compiles this file with tsc. */
+import type { Handler, Validator } from "@schizomatic/core";
+
 import type {
   Bindings,
-  Defaults,
-  Kinds,
-  Matrix,
+  Handlers,
   Mention,
-  Policy,
+  PolicyFull,
+  PolicyPartial,
+  Priority,
+  Role,
+  Roster,
+  Schema,
 } from "./.generated/index.mjs";
 
 type Equal<A, B> =
@@ -13,24 +18,25 @@ type Equal<A, B> =
     ? true
     : false;
 
-type P = {
-  roles: "admin" | "viewer";
-  resources: "doc" | "bucket";
-  actions: { doc: "read" | "write"; bucket: "list" | "put" };
-  owner: Record<string, string>;
-};
-
-export const mention: Equal<Mention<P>, "<admin>" | "<viewer>"> = true;
-export const bindingKeys: Equal<keyof Bindings<P>, "admin" | "viewer"> = true;
-export const defaults: Equal<
-  Defaults<P>,
-  { doc: "read" | "write"; bucket: "list" | "put" }
+export const role: Equal<Role, "admin" | "viewer" | "bot"> = true;
+export const mention: Equal<Mention, "<admin>" | "<viewer>" | "<bot>"> = true;
+export const rosterKeys: Equal<keyof Roster, "admin" | "viewer" | "bot"> = true;
+export const bindingsBot: Equal<
+  Bindings["bot"],
+  Mention | { key: string; ttl: "1h" | "1d" } | undefined
 > = true;
-export const matrixKeys: Equal<keyof Matrix<P>, "doc" | "bucket"> = true;
-export const docActions: Equal<keyof Matrix<P>["doc"], "read" | "write"> = true;
-export const bucketActions: Equal<keyof Matrix<P>["bucket"], "list" | "put"> =
-  true;
-export const priority: Equal<Policy<P>["priority"], ("doc" | "bucket")[]> =
-  true;
-export const kindsPolicy: Equal<Kinds<P>["policy"], Policy<P>> = true;
-export const kindsRole: Equal<Kinds<P>["role"], "admin" | "viewer"> = true;
+export const priority: Equal<Priority, Role[]> = true;
+export const fullRoster: Equal<PolicyFull["roster"], Roster> = true;
+export const fullMatrix: Equal<
+  PolicyFull["matrix"],
+  { [key: string]: Bindings }
+> = true;
+export const partialRoster: Equal<
+  PolicyPartial["roster"],
+  Bindings | undefined
+> = true;
+export const schemaPartial: Equal<
+  Schema["policy"]["partial"],
+  Validator<PolicyPartial>
+> = true;
+export const handler: Equal<Handlers["noSelfGrant"], Handler<Bindings>> = true;

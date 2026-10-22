@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "An event on a user.",
+  "oneOf": [
+    { "$ref": "#/$defs/created" },
+    {
+      "type": "object",
+      "properties": {
+        "kind": { "const": "deleted" },
+        "at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["kind", "at"],
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "created": {
+      "type": "object",
+      "properties": {
+        "kind": { "const": "created" },
+        "user": { "$ref": "./user.json" }
+      },
+      "required": ["kind", "user"],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,97 +1,86 @@
-import { z } from "zod";
+import type { Artifact, Handler, Validator } from "../src";
 
-import type { Artifact, Handler, Params } from "../src";
+/** A user of the demo. */
+export type User = {
+  id: string;
+  email: string;
+  role: "admin" | "member";
+  tags: string[];
+};
+
+/** A node of a recursive tree. */
+export type Tree = { value: number; children: Tree[] };
+
+/** An entry of the audit log. */
+export type Entry = { actor: User; at: string; order: number[] };
+
+/** The service of the demo artifact, as the kit would declare it. */
+export type Schema = {
+  user: Validator<User>;
+  role: Validator<"admin" | "member">;
+  tree: Validator<Tree>;
+  audit: { entry: Validator<Entry> };
+};
+
+/** The handlers of the demo artifact, as the kit would declare them. */
+export type Handlers = { sorted: Handler<Entry> };
 
 /**
- * A stand-in for a built artifact. The kit writes the real one as `index.mjs`
- * with zod bundled in. This one builds the same shape with the zod of the
- * test. It has a set param, a map param, and a named handler.
+ * A stand-in for a built artifact. The kit writes the real one as
+ * `index.mjs`. This one has the same shape: a global `defs` with every
+ * schema and def, the paths that become validators, and one check.
  */
-export const artifact: Artifact = {
+export const artifact: Artifact<Schema, Handlers> = {
   id: "demo",
-  kinds: ["user", "role", "bindings", "priority"],
-  params: ["roles", "owner"],
-  handlers: ["noSelfGrant"],
-  make: (params: Params, handlers: Record<string, Handler>) => {
-    const roles = params.roles as string[];
-    const owner = params.owner as Record<string, string>;
-    const noSelfGrant = handlers.noSelfGrant as Handler;
-
-    const user = z.object({
-      id: z.uuid(),
-      email: z.email(),
-      role: z.enum(["admin", "member"]),
-      tags: z.array(z.string()).max(3).default([]),
-    });
-
-    const role = z.enum(roles);
-
-    const person = z.object({ email: z.email() });
-    const service = z.object({ key: z.string(), ttl: z.enum(["1h", "1d"]) });
-    const byOwner: Record<string, z.ZodType> = { person, service };
-
-    const bindings = z
-      .partialRecord(role, z.unknown())
-      .superRefine((value, ctx) => {
-        for (const [name, grant] of Object.entries(value)) {
-          const shape = byOwner[owner[name] ?? ""];
-          if (shape === undefined) {
-            continue;
-          }
-          const parsed = shape.safeParse(grant);
-          if (!parsed.success) {
-            for (const issue of parsed.error.issues) {
-              ctx.addIssue({ ...issue, path: [name, ...issue.path] });
-            }
-          }
-        }
-        const found = noSelfGrant(value);
-        if (found !== undefined) {
-          ctx.addIssue({
-            code: "custom",
-            message: found.message,
-            path: found.path ?? [],
-          });
-        }
-      });
-
-    const priority = z
-      .array(role)
-      .refine((list) => new Set(list).size === list.length, {
-        message: "Priority has a duplicate.",
-      })
-      .refine((list) => roles.every((name) => list.includes(name)), {
-        message: "Priority must list every role.",
-      });
-
-    return { user, role, bindings, priority };
+  schemas: ["user", "role", "tree", "audit/entry"],
+  checks: { "audit/entry": "sorted" },
+  defs: {
+    role: { enum: ["admin", "member"] },
+    user: {
+      type: "object",
+      properties: {
+        id: { type: "string", format: "uuid" },
+        email: { type: "string", format: "email" },
+        role: { $ref: "#/$defs/role" },
+        tags: { type: "array", items: { type: "string" }, default: [] },
+      },
+      required: ["id", "email", "role"],
+    },
+    tree: {
+      type: "object",
+      properties: {
+        value: { type: "integer", minimum: 0 },
+        children: {
+          type: "array",
+          items: { $ref: "#/$defs/tree" },
+          default: [],
+        },
+      },
+      required: ["value"],
+    },
+    "audit/entry": {
+      type: "object",
+      properties: {
+        actor: { $ref: "#/$defs/user" },
+        at: { type: "string", format: "date-time" },
+        order: { type: "array", items: { type: "integer" } },
+      },
+      required: ["actor", "at", "order"],
+      additionalProperties: false,
+    },
   },
 };
 
-/** The params for the demo artifact. */
-export const params: Params = {
-  roles: ["admin", "viewer", "bot"],
-  owner: { admin: "person", viewer: "person", bot: "service" },
-};
-
-/** A handler that rejects a binding where a role grants itself. */
-export const noSelfGrant: Handler = (v) => {
-  const map = v as Record<string, unknown>;
-  for (const [name, grant] of Object.entries(map)) {
-    if (grant === `<${name}>`) {
-      return { message: "A role grants itself.", path: [name] };
+/** A handler that requires the order of an entry to be ascending. */
+export const sorted: Handler<Entry> = (entry) => {
+  const problems = [];
+  for (let i = 1; i < entry.order.length; i += 1) {
+    if ((entry.order[i] ?? 0) < (entry.order[i - 1] ?? 0)) {
+      problems.push({ message: "Out of order.", path: ["order", i] });
     }
   }
-  return undefined;
+  return problems;
 };
 
 /** The options that bind the demo artifact. */
-export const options = { params, handlers: { noSelfGrant } };
-
-/** The kinds of the demo artifact, as the kit would declare them. */
-export type Kinds = {
-  user: { id: string; email: string; role: "admin" | "member"; tags: string[] };
-  role: "admin" | "viewer" | "bot";
-  bindings: Partial<Record<"admin" | "viewer" | "bot", unknown>>;
-  priority: ("admin" | "viewer" | "bot")[];
-};
+export const options = { handlers: { sorted } };

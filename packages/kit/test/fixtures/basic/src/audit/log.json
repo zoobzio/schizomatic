@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One entry of the audit log.",
+  "type": "object",
+  "properties": {
+    "actor": { "$ref": "../user.json" },
+    "at": { "type": "string", "format": "date-time" },
+    "order": { "type": "array", "items": { "type": "integer" } }
+  },
+  "required": ["actor", "at", "order"],
+  "additionalProperties": false,
+  "x-schizomatic": { "check": "sorted" }
+}

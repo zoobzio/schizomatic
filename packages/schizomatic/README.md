@@ -1,8 +1,7 @@
 # schizomatic
 
 The umbrella package. It re-exports the runtime of
-[`@schizomatic/core`](../core) and the contract types of
-[`@schizomatic/schema`](../schema).
+[`@schizomatic/core`](../core).
 
 ## Install
 
@@ -10,5 +9,5 @@ The umbrella package. It re-exports the runtime of
 pnpm add schizomatic
 ```
 
-[`@schizomatic/kit`](../kit) builds a schema from JSON Schema. Install the kit
-as a separate package.
+[`@schizomatic/kit`](../kit) builds a schema from a directory of JSON Schema
+documents. Install the kit as a separate package.

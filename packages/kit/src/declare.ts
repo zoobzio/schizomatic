@@ -1,22 +1,6 @@
-import type { Contract, Node, SetRef } from "@schizomatic/schema";
-
-import { generic, scoped, settle } from "./scope";
-
-/**
- * The scope of a type. `key` is a type expression for the key of the nearest
- * enclosing entry. `depth` numbers the mapped type variables.
- */
-type Scope = { key?: string; depth: number };
-
-/**
- * The state of a printing. `generic` says whether a def reads a param.
- * `scoped` says whether a def reads the enclosing key.
- */
-type State = {
-  contract: Contract;
-  generic: Set<string>;
-  scoped: Set<string>;
-};
+import { DEFS, EXTENSION } from "./constant";
+import { isObject, unsegment } from "./json";
+import type { JsonObject, JsonValue, Loaded } from "./types";
 
 const q = (s: string): string => JSON.stringify(s);
 
@@ -27,7 +11,8 @@ const prop = (name: string): string =>
   /^[A-Za-z_$][\w$]*$/.test(name) ? name : q(name);
 
 /**
- * Makes a type name from a def name. `audit.log` becomes `AuditLog`.
+ * Makes a type name from a name of the source. `audit/event` becomes
+ * `AuditEvent`.
  */
 export const typeName = (name: string): string => {
   const words = name.split(/[^A-Za-z0-9]+/).filter((word) => word !== "");
@@ -35,16 +20,6 @@ export const typeName = (name: string): string => {
     .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
     .join("");
   return /^[0-9]/.test(joined) ? `_${joined}` : joined || "_";
-};
-
-/**
- * Prints the type of a set reference.
- */
-const setType = (ref: SetRef, scope: Scope): string => {
-  if (typeof ref === "string") {
-    return `P[${q(ref)}]`;
-  }
-  return `P[${q(ref.param)}][${scope.key ?? "string"}]`;
 };
 
 /**
@@ -56,193 +31,261 @@ const group = (type: string): string =>
     : type;
 
 /**
- * Prints the JSDoc for a node, when it has a doc.
+ * Prints the JSDoc for a schema, when it has a description.
  */
-const jsdoc = (doc: string | undefined, indent: string): string =>
-  doc === undefined ? "" : `${indent}/** ${doc.replace(/\*\//g, "* /")} */\n`;
+const jsdoc = (schema: JsonValue, indent: string): string =>
+  isObject(schema) && typeof schema.description === "string"
+    ? `${indent}/** ${schema.description.replace(/\*\//g, "* /")} */\n`
+    : "";
 
 /**
- * Prints the generic arguments of a ref.
+ * Prints a JSON value as a literal type.
  */
-const args = (name: string, scope: Scope, state: State): string => {
-  const list: string[] = [];
-  if (state.generic.has(name)) list.push("P");
-  if (state.scoped.has(name)) list.push(scope.key ?? "string");
-  return list.length === 0 ? "" : `<${list.join(", ")}>`;
+const literal = (value: JsonValue): string => JSON.stringify(value);
+
+/**
+ * Prints the type of an array schema. `prefixItems` makes a tuple. An item
+ * past `minItems` is optional, as zod reads it. `items` after the prefix is
+ * the rest.
+ */
+const array = (schema: JsonObject, indent: string): string => {
+  if (Array.isArray(schema.prefixItems)) {
+    const min = typeof schema.minItems === "number" ? schema.minItems : 0;
+    const items = schema.prefixItems.map((item, index) =>
+      index < min ? type(item, indent) : `${group(type(item, indent))}?`,
+    );
+    if (isObject(schema.items)) {
+      items.push(`...${group(type(schema.items, indent))}[]`);
+    }
+    return `[${items.join(", ")}]`;
+  }
+  return schema.items === undefined
+    ? "unknown[]"
+    : `${group(type(schema.items, indent))}[]`;
 };
 
 /**
- * Prints the type of a node.
+ * Prints the type of an object schema. A property with a `default` is
+ * present in the output, so it is not optional. `additionalProperties` and
+ * `patternProperties` make an index signature.
  */
-export const type = (
-  node: Node,
-  scope: Scope,
-  state: State,
-  indent = "",
-): string => {
-  if (node.ts !== undefined) {
-    return node.ts;
+const object = (schema: JsonObject, indent: string): string => {
+  const parts: string[] = [];
+  const inner = `${indent}  `;
+  const required = new Set(
+    Array.isArray(schema.required)
+      ? schema.required.filter((name) => typeof name === "string")
+      : [],
+  );
+  const properties = isObject(schema.properties) ? schema.properties : {};
+  const fields = Object.entries(properties).map(([name, field]) => {
+    const optional =
+      !required.has(name) && !(isObject(field) && field.default !== undefined);
+    return `${jsdoc(field, inner)}${inner}${prop(name)}${optional ? "?" : ""}: ${type(field, inner)};`;
+  });
+  if (fields.length > 0) {
+    parts.push(`{\n${fields.join("\n")}\n${indent}}`);
   }
-  switch (node.t) {
+
+  const values: string[] = [];
+  if (isObject(schema.patternProperties)) {
+    for (const pattern of Object.values(schema.patternProperties)) {
+      values.push(type(pattern, indent));
+    }
+  }
+  if (isObject(schema.additionalProperties)) {
+    values.push(type(schema.additionalProperties, indent));
+  }
+  if (values.length > 0) {
+    parts.push(`{ [key: string]: ${[...new Set(values)].join(" | ")} }`);
+  } else if (fields.length === 0) {
+    parts.push(
+      schema.additionalProperties === false
+        ? "Record<string, never>"
+        : "{ [key: string]: unknown }",
+    );
+  }
+  return parts.join(" & ");
+};
+
+/**
+ * Prints the type that the `type` keyword and its companions give a schema.
+ * The result is `undefined` when the schema has no type of its own.
+ */
+const core = (schema: JsonObject, indent: string): string | undefined => {
+  const { type: kind } = schema;
+  if (Array.isArray(kind)) {
+    const names = kind.filter((name) => typeof name === "string");
+    const options = names
+      .map((name) => core({ ...schema, type: name }, indent))
+      .filter((option) => option !== undefined);
+    return options.length === 0 ? undefined : options.join(" | ");
+  }
+  switch (kind) {
     case "string":
       return "string";
     case "number":
+    case "integer":
       return "number";
     case "boolean":
       return "boolean";
     case "null":
       return "null";
-    case "unknown":
-      return "unknown";
-    case "literal":
-      return JSON.stringify(node.value);
-    case "enum":
-      return node.values.map((value) => JSON.stringify(value)).join(" | ");
     case "array":
-      return `${group(type(node.item, scope, state, indent))}[]`;
-    case "tuple": {
-      const items = node.items.map((item) => type(item, scope, state, indent));
-      if (node.rest !== undefined) {
-        items.push(`...${group(type(node.rest, scope, state, indent))}[]`);
+      return array(schema, indent);
+    case "object":
+      return object(schema, indent);
+    case undefined:
+      if (
+        schema.properties !== undefined ||
+        schema.additionalProperties !== undefined ||
+        schema.patternProperties !== undefined
+      ) {
+        return object(schema, indent);
       }
-      return `[${items.join(", ")}]`;
-    }
-    case "object": {
-      const parts: string[] = [];
-      const inner = `${indent}  `;
-      const fields = Object.entries(node.fields);
-      if (fields.length > 0) {
-        const lines = fields.map(([name, field]) => {
-          const value = type(
-            field.node,
-            { key: q(name), depth: scope.depth },
-            state,
-            inner,
-          );
-          const optional = field.optional && field.node.t !== "default";
-          return `${jsdoc(field.doc, inner)}${inner}${prop(name)}${optional ? "?" : ""}: ${value};`;
-        });
-        parts.push(`{\n${lines.join("\n")}\n${indent}}`);
+      if (schema.items !== undefined || schema.prefixItems !== undefined) {
+        return array(schema, indent);
       }
-      const variable = `K${scope.depth}`;
-      const entry: Scope = { key: variable, depth: scope.depth + 1 };
-      const keyed = node.keys?.subset ?? node.keys?.superset;
-      const values: string[] = [];
-      if (node.catchall !== undefined)
-        values.push(type(node.catchall, entry, state, inner));
-      if (node.valueBy !== undefined) {
-        for (const schema of Object.values(node.valueBy.schemas))
-          values.push(type(schema, entry, state, inner));
-      }
-      const value =
-        values.length === 0 ? "unknown" : [...new Set(values)].join(" | ");
-      if (keyed !== undefined) {
-        const optional = node.keys?.superset === undefined ? "?" : "";
-        parts.push(
-          `{ [${variable} in ${setType(keyed, scope)}]${optional}: ${value} }`,
-        );
-      } else if (values.length > 0 || fields.length === 0) {
-        parts.push(`{ [${variable} in string]: ${value} }`);
-      }
-      return parts.join(" & ") || "{}";
-    }
-    case "record": {
-      const variable = `K${scope.depth}`;
-      const value = type(
-        node.value,
-        { key: variable, depth: scope.depth + 1 },
-        state,
-        indent,
-      );
-      return `{ [${variable} in ${type(node.key, scope, state, indent)}]: ${value} }`;
-    }
-    case "union":
-      return node.options
-        .map((option) => type(option, scope, state, indent))
-        .join(" | ");
-    case "discriminated":
-      return Object.values(node.options)
-        .map((option) => type(option, scope, state, indent))
-        .join(" | ");
-    case "intersection":
-      return node.parts
-        .map((part) => group(type(part, scope, state, indent)))
-        .join(" & ");
-    case "optional":
-      return `${type(node.inner, scope, state, indent)} | undefined`;
-    case "nullable":
-      return `${type(node.inner, scope, state, indent)} | null`;
-    case "default":
-    case "custom":
-      return type(node.inner, scope, state, indent);
-    case "ref":
-      return `${typeName(node.name)}${args(node.name, scope, state)}`;
-    case "member":
-      return setType(node.param, scope);
+      return undefined;
+    default:
+      return "unknown";
   }
 };
 
 /**
- * Prints the declarations of an artifact. Each def becomes an exported type.
- * A def that reads a param takes `P extends Params`. A def that reads the
- * enclosing key takes `K extends string` too. `Kinds` maps each kind to its
- * type. The default export is the artifact.
- *
- * @param contract - The contract to print.
+ * Prints the type of a schema. A `ts` extension replaces the type. A `$ref`
+ * prints the type name of its target. `allOf` intersects. `anyOf` and
+ * `oneOf` unite. A schema that says nothing is `unknown`.
  */
-export const declaration = (contract: Contract): string => {
-  const state: State = {
-    contract,
-    generic: settle(contract, generic),
-    scoped: settle(contract, scoped),
-  };
+export const type = (schema: JsonValue, indent = ""): string => {
+  if (schema === true) {
+    return "unknown";
+  }
+  if (schema === false) {
+    return "never";
+  }
+  if (!isObject(schema)) {
+    return "unknown";
+  }
+  const ext = schema[EXTENSION];
+  if (isObject(ext) && typeof ext.ts === "string") {
+    return ext.ts;
+  }
+  if (typeof schema.$ref === "string" && schema.$ref.startsWith(DEFS)) {
+    return typeName(unsegment(schema.$ref.slice(DEFS.length)));
+  }
+  if (schema.const !== undefined) {
+    return literal(schema.const);
+  }
+  if (Array.isArray(schema.enum)) {
+    return schema.enum.map(literal).join(" | ");
+  }
+  const parts: string[] = [];
+  const own = core(schema, indent);
+  if (own !== undefined) {
+    parts.push(own);
+  }
+  if (Array.isArray(schema.allOf)) {
+    parts.push(...schema.allOf.map((part) => type(part, indent)));
+  }
+  const alternation = schema.anyOf ?? schema.oneOf;
+  if (Array.isArray(alternation)) {
+    parts.push(alternation.map((option) => type(option, indent)).join(" | "));
+  }
+  if (parts.length === 0) {
+    return "unknown";
+  }
+  return parts.length === 1 ? parts.join("") : parts.map(group).join(" & ");
+};
 
-  const hasParams = Object.keys(contract.params).length > 0;
-  const paramsType = Object.entries(contract.params)
-    .map(
-      ([name, param]) =>
-        `  ${prop(name)}: ${param.kind === "set" ? "string" : "Record<string, string>"};`,
-    )
-    .join("\n");
+/**
+ * A node of the service tree: a path, or the nodes under one directory.
+ */
+type Node = Map<string, Node | string>;
 
-  const defs = Object.entries(contract.defs).map(([name, node]) => {
-    const generics: string[] = [];
-    if (state.generic.has(name)) generics.push("P extends Params = Params");
-    if (state.scoped.has(name)) generics.push("K extends string = string");
-    const head = generics.length === 0 ? "" : `<${generics.join(", ")}>`;
-    const scope: Scope = state.scoped.has(name)
-      ? { key: "K", depth: 0 }
-      : { depth: 0 };
-    return `${jsdoc(node.doc, "")}export type ${typeName(name)}${head} = ${type(node, scope, state)};`;
-  });
+/**
+ * Arranges the schema paths as a tree.
+ */
+const treeOf = (paths: string[]): Node => {
+  const root: Node = new Map();
+  for (const path of paths) {
+    const segments = path.split("/");
+    const leaf = segments.pop();
+    if (leaf === undefined) {
+      continue;
+    }
+    let node = root;
+    for (const name of segments) {
+      let next = node.get(name);
+      if (!(next instanceof Map)) {
+        next = new Map();
+        node.set(name, next);
+      }
+      node = next;
+    }
+    node.set(leaf, path);
+  }
+  return root;
+};
 
-  const kindsHead = hasParams ? "<P extends Params = Params>" : "";
-  const kinds = Object.entries(contract.kinds).map(
-    ([kind, name]) =>
-      `  ${prop(kind)}: ${typeName(name)}${state.generic.has(name) ? "<P>" : ""};`,
+/**
+ * Prints the service tree as a type. A leaf is a `Validator` of the type of
+ * its path.
+ */
+const tree = (node: Node, indent: string): string => {
+  const inner = `${indent}  `;
+  const lines = [...node.entries()].map(([name, child]) =>
+    typeof child === "string"
+      ? `${inner}${prop(name)}: Validator<${typeName(child)}>;`
+      : `${inner}${prop(name)}: ${tree(child, inner)};`,
+  );
+  return `{\n${lines.join("\n")}\n${indent}}`;
+};
+
+/**
+ * Prints the declaration of an artifact. Each schema and each def becomes an
+ * exported type. `Schema` is the service: a `Validator` for each path, in
+ * the tree of the source. `Handlers` types each handler by the schema it
+ * checks. The default export is the artifact, typed by both.
+ *
+ * @param loaded - The loaded source.
+ */
+export const declaration = (loaded: Loaded): string => {
+  const defs = Object.entries(loaded.defs).map(
+    ([name, schema]) =>
+      `${jsdoc(schema, "")}export type ${typeName(name)} = ${type(schema)};`,
   );
 
+  const byHandler = new Map<string, Set<string>>();
+  for (const [path, name] of Object.entries(loaded.checks)) {
+    const found = byHandler.get(name) ?? new Set();
+    found.add(typeName(path));
+    byHandler.set(name, found);
+  }
+  const handlers = [...byHandler.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(
+      ([name, types]) => `  ${prop(name)}: Handler<${[...types].join(" | ")}>;`,
+    );
+
   return [
-    `// Generated by @schizomatic/kit from ${q(contract.id)}. Do not edit by hand.`,
-    `import type { Artifact } from "@schizomatic/core";`,
+    `// Generated by @schizomatic/kit from ${q(loaded.id)}. Do not edit by hand.`,
+    `import type { Artifact, Handler, Validator } from "@schizomatic/core";`,
     "",
-    ...(hasParams
-      ? [
-          "/** The params that a service binds at boot. Narrow each member to its union. */",
-          `export type Params = {\n${paramsType}\n};`,
-          "",
-        ]
-      : []),
     ...defs.flatMap((def) => [def, ""]),
-    "/** The type that each kind narrows to. */",
-    `export type Kinds${kindsHead} = {\n${kinds.join("\n")}\n};`,
+    "/** The service: a validator for each schema, in the tree of the source. */",
+    `export type Schema = ${tree(treeOf(loaded.schemas), "")};`,
     "",
-    `export declare const id: ${q(contract.id)};`,
-    `export declare const kinds: readonly ${JSON.stringify(Object.keys(contract.kinds))};`,
-    `export declare const params: readonly ${JSON.stringify(Object.keys(contract.params))};`,
-    `export declare const handlers: readonly ${JSON.stringify(contract.handlers)};`,
-    `export declare const make: Artifact["make"];`,
-    "declare const artifact: Artifact;",
+    "/** The handlers that the service binds at boot, each typed by the schema it checks. */",
+    handlers.length === 0
+      ? "export type Handlers = Record<never, never>;"
+      : `export type Handlers = {\n${handlers.join("\n")}\n};`,
+    "",
+    `export declare const id: ${q(loaded.id)};`,
+    `export declare const schemas: readonly ${JSON.stringify(loaded.schemas)};`,
+    `export declare const checks: ${JSON.stringify(loaded.checks)};`,
+    `export declare const defs: Artifact["defs"];`,
+    "declare const artifact: Artifact<Schema, Handlers>;",
     "export default artifact;",
     "",
   ].join("\n");

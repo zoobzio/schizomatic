@@ -2,7 +2,8 @@ import type { Issue } from "./types";
 
 /**
  * The error that `assert` and `parse` throw. The error holds every
- * {@link Issue} of the pass.
+ * {@link Issue} of the pass. The message has one line for each issue, with
+ * the path after it.
  */
 export class SchemaError extends Error {
   readonly issues: Issue[];
@@ -20,8 +21,9 @@ export class SchemaError extends Error {
 }
 
 /**
- * The error that `makeService` throws when the params or the handlers do not
- * match what the artifact declares. The error lists every problem.
+ * The error that `makeService` throws when the artifact or the options are
+ * not valid: a handler is missing, a document does not build, or two paths
+ * collide. The error lists every problem.
  */
 export class ArtifactError extends Error {
   readonly problems: string[];
@@ -29,7 +31,7 @@ export class ArtifactError extends Error {
   constructor(id: string, problems: string[]) {
     const lines = problems.map((problem) => `  ${problem}`);
     super(
-      `@schizomatic/core: the options for ${JSON.stringify(id)} are invalid —\n${lines.join("\n")}`,
+      `@schizomatic/core: the artifact ${JSON.stringify(id)} cannot be served —\n${lines.join("\n")}`,
     );
     this.name = "ArtifactError";
     this.problems = problems;

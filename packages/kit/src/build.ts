@@ -1,28 +1,25 @@
-import type { Contract } from "@schizomatic/schema";
-
-import { bundle } from "./bundle";
 import { loadConfig } from "./config";
 import { emit } from "./emit";
+import { KitError } from "./error";
 import { load } from "./load";
-import { lowerOrThrow } from "./lower";
+import { prove } from "./prove";
 import type { Output, Resolved } from "./types";
 import { write } from "./write";
-import { zodSource } from "./zod";
 
 /**
- * Compiles a source document to its files. The function loads the document,
- * lowers it to the contract, emits the zod source, bundles it, and emits the
- * files. It writes nothing.
+ * Compiles a source directory to its files. The function loads the source,
+ * proves each schema with zod, and emits the files. It writes nothing.
  *
  * @param resolved - The resolved config.
+ * @throws KitError when a schema does not load or does not build.
  */
-export const compile = async (
-  resolved: Resolved,
-): Promise<Omit<Output, "outDir">> => {
-  const doc = load(resolved.source);
-  const contract: Contract = lowerOrThrow(doc, resolved.id);
-  const artifact = await bundle(zodSource(contract), contract.id);
-  return { contract, files: emit(contract, artifact) };
+export const compile = (resolved: Resolved): Omit<Output, "outDir"> => {
+  const loaded = load(resolved.source, resolved.id);
+  const problems = prove(loaded);
+  if (problems.length > 0) {
+    throw new KitError("the source does not build", problems);
+  }
+  return { loaded, files: emit(loaded) };
 };
 
 /**
@@ -35,7 +32,7 @@ export const build = async (
   options: { root?: string; config?: string } = {},
 ): Promise<Output> => {
   const resolved = await loadConfig(options);
-  const compiled = await compile(resolved);
+  const compiled = compile(resolved);
   write(compiled.files, resolved.outDir);
   return { ...compiled, outDir: resolved.outDir };
 };

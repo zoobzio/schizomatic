@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "admin": { "$ref": "./assignment.json" },
+    "viewer": { "$ref": "./assignment.json" },
+    "bot": { "$ref": "./assignment.json" }
+  },
+  "required": ["admin", "viewer", "bot"],
+  "additionalProperties": false
+}

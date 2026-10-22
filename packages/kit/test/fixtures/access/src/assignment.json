@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "kind": { "enum": ["person", "service"] },
+    "grant": {
+      "anyOf": [{ "$ref": "./mention.json" }, { "$ref": "./principal.json" }]
+    },
+    "note": { "type": "string" }
+  },
+  "required": ["kind", "grant"],
+  "additionalProperties": false
+}

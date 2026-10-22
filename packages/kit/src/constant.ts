@@ -1,11 +1,11 @@
 /* The default config file name. */
 export const CONFIG_FILE = "schizomatic.config.ts";
 
+/* The default source directory. */
+export const SOURCE = "./src";
+
 /* The default output directory. */
 export const OUT_DIR = ".dist";
-
-/* The file name of the contract in the output directory. */
-export const CONTRACT = "contract.json";
 
 /* The file name of the artifact in the output directory. */
 export const ARTIFACT = "index.mjs";
@@ -16,36 +16,14 @@ export const DECLARATION = "index.d.mts";
 /* The extension key that the kit reads in a JSON Schema document. */
 export const EXTENSION = "x-schizomatic";
 
-/* The prefix of a `$ref` into the root `$defs`. */
+/* The members of the extension. `check` names a handler. `ts` replaces the printed type. */
+export const EXTENSION_KEYS = ["check", "ts"] as const;
+
+/* The prefix of a `$ref` into `$defs`. */
 export const DEFS = "#/$defs/";
 
-/* The JSON Schema keywords that the kit does not support. A document that uses one fails the build. */
-export const UNSUPPORTED = [
-  "patternProperties",
-  "dependentSchemas",
-  "dependentRequired",
-  "if",
-  "then",
-  "else",
-  "not",
-  "contains",
-  "minContains",
-  "maxContains",
-  "unevaluatedProperties",
-  "unevaluatedItems",
-  "$dynamicRef",
-  "$dynamicAnchor",
-  "$anchor",
-  "minProperties",
-  "maxProperties",
-] as const;
+/* The keywords of a file that describe the file. The kit drops them from the schema of the file. */
+export const FILE_KEYS = ["$schema", "$id", "$defs", "$comment"] as const;
 
-/* The JSON Schema formats the kit maps, and the contract format for each. */
-export const FORMAT_MAP = {
-  email: "email",
-  uuid: "uuid",
-  uri: "url",
-  url: "url",
-  "date-time": "datetime",
-  date: "date",
-} as const;
+/* The keywords whose value is instance data, not a schema. The kit does not walk them. */
+export const DATA_KEYS = ["const", "default", "enum", "examples"] as const;

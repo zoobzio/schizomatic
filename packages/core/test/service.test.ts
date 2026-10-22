@@ -1,57 +1,98 @@
 import { describe, expect, it } from "vitest";
 
 import { ArtifactError, SchemaError, makeService } from "../src";
-import type { Artifact, Service } from "../src";
+import type { Artifact, Handler } from "../src";
 import { artifact, options } from "./fixture";
-import type { Kinds } from "./fixture";
+import type { Schema } from "./fixture";
 
-const schema: Service<Kinds> = makeService<Kinds>(artifact, options);
+const schema: Schema = makeService(artifact, options);
 
 const uuid = "123e4567-e89b-42d3-a456-426614174000";
-const user = { id: uuid, email: "a@b.co", role: "admin" };
+const user = { id: uuid, email: "a@b.co", role: "admin" as const };
+const entry = { actor: user, at: "2026-01-01T00:00:00Z", order: [1, 2] };
+
+/** Returns the problems of the error that `run` throws, or `[]`. */
+const problems = (run: () => unknown): string[] => {
+  try {
+    run();
+    return [];
+  } catch (error) {
+    if (error instanceof ArtifactError) {
+      return error.problems;
+    }
+    throw error;
+  }
+};
 
 describe("makeService", () => {
-  it("names the artifact and has every kind in every bundle", () => {
-    expect(schema.id).toBe("demo");
-    for (const kind of artifact.kinds) {
-      expect(typeof schema.check[kind as keyof Kinds]).toBe("function");
-      expect(typeof schema.assert[kind as keyof Kinds]).toBe("function");
-      expect(typeof schema.parse[kind as keyof Kinds]).toBe("function");
-      expect(typeof schema.inspect[kind as keyof Kinds]).toBe("function");
+  it("mirrors the paths of the artifact as a tree of validators", () => {
+    for (const leaf of [
+      schema.user,
+      schema.role,
+      schema.tree,
+      schema.audit.entry,
+    ]) {
+      expect(Object.keys(leaf)).toEqual([
+        "check",
+        "assert",
+        "parse",
+        "inspect",
+      ]);
     }
   });
 
-  it("throws an ArtifactError before make when the options do not match", () => {
-    expect(() => makeService<Kinds>(artifact, {})).toThrow(ArtifactError);
+  it("throws an ArtifactError before it builds when a handler is missing", () => {
+    expect(problems(() => makeService(artifact, {}))).toEqual([
+      "handlers.sorted is required",
+    ]);
   });
 
-  it("throws when make returns no validator for a declared kind", () => {
-    const broken: Artifact = { ...artifact, make: () => ({}) };
-    expect(() => makeService<Kinds>(broken, options)).toThrow(/no validator/);
+  it("reports a document that zod cannot build, with its path", () => {
+    const broken: Artifact = {
+      ...artifact,
+      checks: {},
+      schemas: ["user", "odd"],
+      defs: { ...artifact.defs, odd: { if: { type: "string" } } },
+    };
+    expect(problems(() => makeService(broken))).toEqual([
+      "odd: Conditional schemas (if/then/else) are not supported",
+    ]);
+  });
+
+  it("reports a path that is both a schema and a directory", () => {
+    const broken: Artifact = {
+      ...artifact,
+      checks: {},
+      schemas: ["audit", "audit/entry"],
+      defs: { ...artifact.defs, audit: { type: "object" } },
+    };
+    expect(problems(() => makeService(broken))).toEqual([
+      "audit is both a schema and a directory",
+    ]);
   });
 });
 
 describe("check", () => {
   it("returns a boolean and narrows", () => {
     const v: unknown = user;
-    expect(schema.check.user(v)).toBe(true);
-    if (schema.check.user(v)) {
+    expect(schema.user.check(v)).toBe(true);
+    if (schema.user.check(v)) {
       expect(v.role).toBe("admin");
     }
-    expect(schema.check.user({ ...user, role: "owner" })).toBe(false);
+    expect(schema.user.check({ ...user, role: "owner" })).toBe(false);
   });
 
-  it("reads a set param", () => {
-    expect(schema.check.role("admin")).toBe(true);
-    expect(schema.check.role("other")).toBe(false);
+  it("validates a nested path", () => {
+    expect(schema.audit.entry.check(entry)).toBe(true);
+    expect(schema.audit.entry.check({ ...entry, at: "soon" })).toBe(false);
   });
 });
 
 describe("assert", () => {
   it("returns for a valid value and throws a SchemaError with every issue", () => {
-    expect(() => schema.assert.user(user)).not.toThrow();
+    expect(() => schema.user.assert(user)).not.toThrow();
     try {
-      schema.assert.user({ id: "x", email: "y", role: "z" });
+      schema.user.assert({ id: "x", email: "y", role: "z" });
       expect.unreachable();
     } catch (error) {
       expect(error).toBeInstanceOf(SchemaError);
@@ -66,62 +107,80 @@ describe("assert", () => {
 });
 
 describe("parse", () => {
-  it("returns the output with defaults filled", () => {
-    expect(schema.parse.user(user)).toEqual({ ...user, tags: [] });
+  it("returns the output with the defaults filled", () => {
+    expect(schema.user.parse(user)).toEqual({ ...user, tags: [] });
   });
 
-  it("strips keys the contract does not declare", () => {
-    expect(schema.parse.user({ ...user, extra: 1 })).toEqual({
+  it("keeps an extra key, as JSON Schema admits one unless the schema says otherwise", () => {
+    expect(schema.user.parse({ ...user, extra: 1 })).toEqual({
       ...user,
+      extra: 1,
       tags: [],
     });
+    expect(schema.audit.entry.check({ ...entry, extra: 1 })).toBe(false);
   });
 
-  it("throws a SchemaError for an invalid value", () => {
-    expect(() => schema.parse.priority(["admin", "admin"])).toThrow(
-      SchemaError,
-    );
+  it("follows a recursive ref", () => {
+    expect(schema.tree.parse({ value: 1, children: [{ value: 2 }] })).toEqual({
+      value: 1,
+      children: [{ value: 2, children: [] }],
+    });
+    expect(() => schema.tree.parse({ value: -1 })).toThrow(SchemaError);
   });
 });
 
 describe("inspect", () => {
   it("returns a success result with the data", () => {
-    const result = schema.inspect.priority(["admin", "viewer", "bot"]);
-    expect(result).toEqual({ success: true, data: ["admin", "viewer", "bot"] });
+    expect(schema.role.inspect("admin")).toEqual({
+      success: true,
+      data: "admin",
+    });
   });
 
   it("returns a failure result with the issues", () => {
-    const result = schema.inspect.priority(["admin"]);
+    const result = schema.role.inspect("owner");
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.issues[0]?.message).toBe("Priority must list every role.");
+      expect(result.issues[0]?.code).toBe("invalid_value");
     }
   });
 });
 
-describe("params and handlers", () => {
-  it("picks the value shape of a key from a map param", () => {
-    expect(schema.check.bindings({ admin: { email: "a@b.co" } })).toBe(true);
-    expect(schema.check.bindings({ bot: { key: "k", ttl: "1h" } })).toBe(true);
-    const result = schema.inspect.bindings({ admin: { key: "k", ttl: "1h" } });
+describe("handlers", () => {
+  it("runs the handler on the parsed output and keeps each path", () => {
+    const result = schema.audit.entry.inspect({ ...entry, order: [3, 1, 2] });
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.issues[0]?.path).toEqual(["admin", "email"]);
+      expect(result.issues.map((issue) => [issue.message, issue.path])).toEqual(
+        [["Out of order.", ["order", 1]]],
+      );
     }
   });
 
-  it("rejects a key outside the set param", () => {
-    expect(schema.check.bindings({ other: { email: "a@b.co" } })).toBe(false);
-  });
-
-  it("runs a named handler and keeps its path", () => {
-    const result = schema.inspect.bindings({ admin: "<admin>" });
+  it("does not run the handler when zod rejects the value", () => {
+    const result = schema.audit.entry.inspect({ ...entry, at: "soon" });
     expect(result.success).toBe(false);
     if (!result.success) {
-      const found = result.issues.find(
-        (issue) => issue.message === "A role grants itself.",
-      );
-      expect(found?.path).toEqual(["admin"]);
+      expect(result.issues.map((issue) => issue.code)).toEqual([
+        "invalid_format",
+      ]);
+    }
+  });
+
+  it("accepts one problem in place of a list", () => {
+    const one: Artifact<Schema, { never: Handler<string> }> = {
+      id: artifact.id,
+      schemas: artifact.schemas,
+      defs: artifact.defs,
+      checks: { role: "never" },
+    };
+    const service: Schema = makeService(one, {
+      handlers: { never: () => ({ message: "No." }) },
+    });
+    const result = service.role.inspect("admin");
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.issues.map((issue) => issue.message)).toEqual(["No."]);
     }
   });
 });

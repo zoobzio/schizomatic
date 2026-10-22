@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "roster": { "$ref": "../roster.json" },
+    "matrix": {
+      "type": "object",
+      "propertyNames": { "enum": ["doc", "bucket"] },
+      "additionalProperties": { "$ref": "../bindings.json" }
+    },
+    "priority": { "$ref": "../priority.json" }
+  },
+  "required": ["id", "name", "roster", "matrix", "priority"],
+  "additionalProperties": false
+}

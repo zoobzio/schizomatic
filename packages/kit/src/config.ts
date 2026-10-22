@@ -1,8 +1,8 @@
-import { isAbsolute, relative, resolve } from "node:path";
+import { basename, isAbsolute, relative, resolve } from "node:path";
 
 import { createJiti } from "jiti";
 
-import { CONFIG_FILE, OUT_DIR } from "./constant";
+import { CONFIG_FILE, OUT_DIR, SOURCE } from "./constant";
 import { KitError } from "./error";
 import type { Config, Resolved } from "./types";
 
@@ -28,11 +28,21 @@ export const resolveConfig = (config: unknown, root: string): Resolved => {
   }
   const { source, id, outDir } = config as Record<string, unknown>;
 
-  if (typeof source !== "string" || source.trim() === "") {
-    problems.push("source must be a path to the root JSON Schema document");
+  let src = SOURCE;
+  if (source !== undefined) {
+    if (typeof source !== "string" || source.trim() === "") {
+      problems.push("source must be a path to the source directory");
+    } else {
+      src = source;
+    }
   }
-  if (id !== undefined && (typeof id !== "string" || id.trim() === "")) {
-    problems.push("id must be a non-empty string");
+  let identity = basename(root);
+  if (id !== undefined) {
+    if (typeof id !== "string" || id.trim() === "") {
+      problems.push("id must be a non-empty string");
+    } else {
+      identity = id;
+    }
   }
   let out = OUT_DIR;
   if (outDir !== undefined) {
@@ -51,15 +61,12 @@ export const resolveConfig = (config: unknown, root: string): Resolved => {
   if (problems.length > 0) {
     throw new KitError("the config is invalid", problems);
   }
-  const resolved: Resolved = {
+  return {
     root,
-    source: resolve(root, source as string),
+    source: resolve(root, src),
+    id: identity,
     outDir: resolve(root, out),
   };
-  if (typeof id === "string") {
-    resolved.id = id;
-  }
-  return resolved;
 };
 
 /**

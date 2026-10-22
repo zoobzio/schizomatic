@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A grant for each role that has one.",
+  "type": "object",
+  "properties": {
+    "admin": { "$ref": "#/$defs/personGrant" },
+    "viewer": { "$ref": "#/$defs/personGrant" },
+    "bot": {
+      "anyOf": [{ "$ref": "./mention.json" }, { "$ref": "./service.json" }]
+    }
+  },
+  "additionalProperties": false,
+  "x-schizomatic": { "check": "noSelfGrant" },
+  "$defs": {
+    "personGrant": {
+      "anyOf": [{ "$ref": "./mention.json" }, { "$ref": "./person.json" }]
+    }
+  }
+}

@@ -5,8 +5,8 @@ import { ArtifactError, SchemaError } from "../src";
 describe("SchemaError", () => {
   it("holds every issue and names the path in the message", () => {
     const error = new SchemaError([
-      { code: "invalid_type", message: "Expected string.", path: [] },
-      { code: "too_small", message: "Too small.", path: ["user", 0] },
+      { code: "custom", message: "Expected string.", path: [], input: 1 },
+      { code: "custom", message: "Too small.", path: ["user", 0], input: 1 },
     ]);
     expect(error.name).toBe("SchemaError");
     expect(error.issues).toHaveLength(2);
@@ -18,14 +18,14 @@ describe("SchemaError", () => {
 describe("ArtifactError", () => {
   it("names the artifact and lists every problem", () => {
     const error = new ArtifactError("demo", [
-      "params.a is required",
-      "handlers.b is required",
+      "handlers.a is required",
+      "b: not supported",
     ]);
     expect(error.name).toBe("ArtifactError");
     expect(error.problems).toHaveLength(2);
     expect(error.message).toContain('"demo"');
     expect(error.message).toContain(
-      "  params.a is required\n  handlers.b is required",
+      "  handlers.a is required\n  b: not supported",
     );
   });
 });
