@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "x-schizomatic": {
+    "params": {
+      "tokens": { "kind": "set" },
+      "modifiers": { "kind": "set" },
+      "contexts": { "kind": "map", "keys": "modifiers", "of": "set" },
+      "types": {
+        "kind": "map",
+        "keys": "tokens",
+        "of": "enum",
+        "values": ["color", "dimension"]
+      }
+    },
+    "kinds": {
+      "token": "token",
+      "reference": "reference",
+      "value": "value",
+      "definition": "definition",
+      "overrides": "overrides",
+      "tokens": "tokens",
+      "modifiers": "modifiers",
+      "input": "input",
+      "order": "order",
+      "theme": "theme",
+      "patch": "patch"
+    }
+  },
+  "$defs": {
+    "token": {
+      "type": "string",
+      "x-schizomatic": { "member": "tokens" },
+      "description": "The name of a token."
+    },
+    "reference": {
+      "type": "string",
+      "pattern": "^\\{.+\\}$",
+      "x-schizomatic": {
+        "member": "tokens",
+        "slice": [1, -1],
+        "ts": "`{${P[\"tokens\"]}}`"
+      }
+    },
+    "colorRef": {
+      "type": "string",
+      "x-schizomatic": {
+        "member": "tokens",
+        "slice": [1, -1],
+        "typed": { "param": "types", "equals": "color" },
+        "ts": "`{${P[\"tokens\"]}}`"
+      }
+    },
+    "color": {
+      "type": "object",
+      "properties": {
+        "hex": { "type": "string", "pattern": "^#[0-9a-f]{6}$" }
+      },
+      "required": ["hex"],
+      "additionalProperties": false
+    },
+    "dimension": {
+      "type": "object",
+      "properties": {
+        "value": { "type": "number" },
+        "unit": { "enum": ["px", "rem"] }
+      },
+      "required": ["value", "unit"],
+      "additionalProperties": false
+    },
+    "colorValue": {
+      "anyOf": [{ "$ref": "#/$defs/colorRef" }, { "$ref": "#/$defs/color" }]
+    },
+    "value": {
+      "anyOf": [{ "$ref": "#/$defs/color" }, { "$ref": "#/$defs/dimension" }]
+    },
+    "binding": {
+      "anyOf": [{ "$ref": "#/$defs/reference" }, { "$ref": "#/$defs/value" }]
+    },
+    "definition": {
+      "type": "object",
+      "properties": {
+        "$type": { "enum": ["color", "dimension"] },
+        "$value": { "$ref": "#/$defs/binding" },
+        "$description": { "type": "string" }
+      },
+      "required": ["$type", "$value"],
+      "additionalProperties": false
+    },
+    "overrides": {
+      "type": "object",
+      "x-schizomatic": {
+        "keys": { "subset": "tokens" },
+        "valueBy": {
+          "param": "types",
+          "schemas": {
+            "color": { "$ref": "#/$defs/colorValue" },
+            "dimension": {
+              "anyOf": [
+                { "$ref": "#/$defs/reference" },
+                { "$ref": "#/$defs/dimension" }
+              ]
+            }
+          }
+        },
+        "check": "acyclic"
+      }
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/definition" },
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^;{}]+$"
+      },
+      "x-schizomatic": { "keys": { "exact": "tokens" } }
+    },
+    "contexts": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/overrides" },
+      "x-schizomatic": {
+        "keys": { "exact": { "param": "contexts", "at": "$key" } }
+      }
+    },
+    "modifiers": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/contexts" },
+      "x-schizomatic": { "keys": { "exact": "modifiers" } }
+    },
+    "partialContexts": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/overrides" },
+      "x-schizomatic": {
+        "keys": { "subset": { "param": "contexts", "at": "$key" } }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "x-schizomatic": { "member": { "param": "contexts", "at": "$key" } }
+      },
+      "x-schizomatic": { "keys": { "exact": "modifiers" } }
+    },
+    "order": {
+      "type": "array",
+      "items": { "type": "string", "x-schizomatic": { "member": "modifiers" } },
+      "uniqueItems": true,
+      "x-schizomatic": { "exhaustive": "modifiers" }
+    },
+    "theme": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "tokens": { "$ref": "#/$defs/tokens" },
+        "modifiers": { "$ref": "#/$defs/modifiers" },
+        "order": { "$ref": "#/$defs/order" }
+      },
+      "required": ["id", "name", "tokens", "modifiers", "order"],
+      "additionalProperties": false
+    },
+    "patch": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "tokens": { "$ref": "#/$defs/overrides" },
+        "modifiers": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/partialContexts" },
+          "x-schizomatic": { "keys": { "subset": "modifiers" } }
+        },
+        "order": { "$ref": "#/$defs/order" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

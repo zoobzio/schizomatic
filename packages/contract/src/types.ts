@@ -27,6 +27,14 @@ export type Json =
   | { [key: string]: Json };
 
 /**
+ * A reference to a set that a service binds at boot. A string names a `set`
+ * param. An object names a `map` param whose value is a set, indexed by the
+ * key of the nearest enclosing object entry. The key is the field name for a
+ * field, or the key of the entry for a catchall or a `valueBy` value.
+ */
+export type SetRef = string | { param: string; at: "$key" };
+
+/**
  * A type hint for the printer. The printer writes the hint in place of the
  * type it derives from the node. A hint carries a TypeScript type that JSON
  * Schema cannot express, such as a template literal.
@@ -72,20 +80,21 @@ export type Node = Hint &
         min?: number;
         max?: number;
         unique?: boolean;
-        /* The items must cover every member of a set param. */
-        exhaustive?: string;
+        /* The items must cover every member of a set. */
+        exhaustive?: SetRef;
       }
     | { t: "tuple"; items: Node[]; rest?: Node }
     | {
         t: "object";
         fields: Record<string, Field>;
         extra: "strip" | "strict" | "passthrough";
+        /* The node for each key that is not a field. */
         catchall?: Node;
         /* A node that each key must match. */
         names?: Node;
-        /* The keys must be a subset, a superset, or exactly the members of a set param. */
-        keys?: { subset?: string; superset?: string };
-        /* The value schema for a key comes from a map param. */
+        /* The keys must be a subset or a superset of a set. Both make the keys exact. */
+        keys?: { subset?: SetRef; superset?: SetRef };
+        /* The value node for a key comes from a map param of enum values. */
         valueBy?: { param: string; schemas: Record<string, Node> };
       }
     | { t: "record"; key: Node; value: Node }
@@ -98,11 +107,11 @@ export type Node = Hint &
     | { t: "ref"; name: string }
     | {
         t: "member";
-        /* The set param that holds the allowed values. */
-        param: string;
+        /* The set that holds the allowed values. */
+        param: SetRef;
         /* The slice of the string to look up, such as `[1, -1]` for `{name}`. */
         slice?: [number, number];
-        /* The map param and the value that the member must map to. */
+        /* The map param of enum values, and the value that the member must map to. */
         typed?: { param: string; equals: string };
       }
     | { t: "custom"; id: string; inner: Node }
@@ -126,12 +135,14 @@ export type Param =
 /**
  * A contract. The contract is JSON. `defs` holds the named nodes. `kinds`
  * names the public entry points. Each kind points to a def. `params` declares
- * the sets and the maps that a service binds at boot.
+ * the sets and the maps that a service binds at boot. `handlers` lists the
+ * ids of the `custom` nodes.
  */
 export type Contract = {
   id: string;
   version: Version;
   defs: Record<string, Node>;
   kinds: Record<string, string>;
-  params?: Record<string, Param>;
+  params: Record<string, Param>;
+  handlers: string[];
 };

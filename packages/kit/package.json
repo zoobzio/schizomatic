@@ -31,12 +31,12 @@
   },
   "dependencies": {
     "@schizomatic/contract": "workspace:*",
-    "@schizomatic/core": "workspace:*",
     "jiti": "catalog:",
-    "objectively": "catalog:",
+    "rolldown": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@schizomatic/core": "workspace:*",
     "@types/node": "catalog:"
   }
 }

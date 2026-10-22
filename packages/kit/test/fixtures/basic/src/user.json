@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "User",
+  "description": "A user of the app.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Stable user id"
+    },
+    "email": { "type": "string", "format": "email" },
+    "role": { "$ref": "#/$defs/role" },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "maxItems": 3,
+      "uniqueItems": true,
+      "default": []
+    },
+    "age": { "type": ["integer", "null"], "minimum": 0, "maximum": 150 },
+    "name": { "type": "string", "pattern": "^[A-Z]" }
+  },
+  "required": ["id", "email", "role"],
+  "$defs": {
+    "role": { "enum": ["admin", "member"] }
+  }
+}

@@ -1,9 +1,11 @@
 import { parseArgs } from "node:util";
 
+import { build } from "./build";
+
 const HELP = `Usage: schizomatic build [options]
 
 Builds the schema schizomatic.config.ts points at: reads the JSON Schema
-documents and writes the contract, the validators, and the declarations to
+documents and writes the contract, the artifact, and the declarations to
 the output directory.
 
 Options:
@@ -32,8 +34,10 @@ const main = async (argv: string[]): Promise<void> => {
     return;
   }
 
-  console.error("@schizomatic/kit: build is not implemented yet");
-  process.exitCode = 1;
+  const output = await build({ config: values.config, root: values.root });
+  console.log(
+    `@schizomatic/kit: wrote ${output.files.length} files to ${output.outDir}`,
+  );
 };
 
 main(process.argv.slice(2)).catch((error: unknown) => {

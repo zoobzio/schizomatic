@@ -21,9 +21,6 @@ catalogs:
     jiti:
       specifier: ^2.7.0
       version: 2.7.0
-    objectively:
-      specifier: ^0.2.0
-      version: 0.2.0
     obuild:
       specifier: ^0.4.44
       version: 0.4.45
@@ -33,6 +30,9 @@ catalogs:
     oxlint:
       specifier: ^1.86.0
       version: 1.89.0
+    rolldown:
+      specifier: ^1.2.15
+      version: 1.2.15
     turbo:
       specifier: ^2.11.7
       version: 2.11.10
@@ -98,19 +98,19 @@ importers:
       '@schizomatic/contract':
         specifier: workspace:*
         version: link:../contract
-      '@schizomatic/core':
-        specifier: workspace:*
-        version: link:../core
       jiti:
         specifier: 'catalog:'
         version: 2.7.0
-      objectively:
+      rolldown:
         specifier: 'catalog:'
-        version: 0.2.0
+        version: 1.2.15
       zod:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
+      '@schizomatic/core':
+        specifier: workspace:*
+        version: link:../core
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.9
@@ -1068,9 +1068,6 @@ packages:
     peerDependenciesMeta:
       encoding:
         optional: true
-
-  objectively@0.2.0:
-    resolution: {integrity: sha512-w2By5ARMfMu4ROrO6JQkFJuj21RyR1tpEuKB+HhbtGFJMbQaiXcaAOct09zv10e4fzhP1eNHI9gSvKVMrQ4Amg==}
 
   obug@3.0.0:
     resolution: {integrity: sha512-5vvB5+W7ePv+p3uqxi+RcW1XAzLW0/hxt3/4X4Lc4qHudzOhmBiBwOY6DRob4WnanAEGvNcLjF+KNOufrUoEQw==}
@@ -2196,8 +2193,6 @@ snapshots:
   node-fetch@2.7.0:
     dependencies:
       whatwg-url: 5.0.0
-
-  objectively@0.2.0: {}
 
   obug@3.0.0: {}
 

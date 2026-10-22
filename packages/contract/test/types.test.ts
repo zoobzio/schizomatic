@@ -30,6 +30,7 @@ describe("contract", () => {
         },
       },
       kinds: { token: "token", overrides: "overrides" },
+      handlers: [],
     };
     expect(contract.kinds.token).toBe("token");
   });
