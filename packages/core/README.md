@@ -21,8 +21,8 @@ import { makeService } from "@schizomatic/core";
 import artifact, { type Kinds } from "./schema/index.mjs";
 
 const schema = makeService<Kinds>(artifact, {
-  params: { tokens: ["primary", "surface"] },
-  handlers: { acyclic },
+  params: { roles: ["admin", "viewer"] },
+  handlers: { noSelfGrant },
 });
 
 schema.check.user(value); // boolean, narrows value to Kinds["user"]
@@ -39,7 +39,7 @@ has `safeParse`. A zod schema is a validator, so a hand-written zod schema can
 stand in for an artifact in a test.
 
 - A **param** is a set or a map that the service binds at boot. A kind that
-  reads a param, such as an enum over token names, resolves when `make` runs.
+  reads a param, such as an enum over role names, resolves when `make` runs.
 - A **handler** is a named check. The artifact calls it inside a zod `check`.
 
 `makeService` checks the options against the declaration of the artifact

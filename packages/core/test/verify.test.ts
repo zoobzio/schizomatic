@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ArtifactError, verify } from "../src";
-import { acyclic, artifact, params } from "./fixture";
+import { noSelfGrant, artifact, params } from "./fixture";
 
 /** Returns the problems of the error that `verify` throws, or `[]`. */
 const problems = (run: () => void): string[] => {
@@ -19,15 +19,15 @@ const problems = (run: () => void): string[] => {
 describe("verify", () => {
   it("accepts options that bind every param and handler", () => {
     expect(
-      problems(() => verify(artifact, { params, handlers: { acyclic } })),
+      problems(() => verify(artifact, { params, handlers: { noSelfGrant } })),
     ).toEqual([]);
   });
 
   it("reports a missing param and a missing handler together", () => {
     expect(problems(() => verify(artifact, {}))).toEqual([
-      "params.tokens is required",
-      "params.types is required",
-      "handlers.acyclic is required",
+      "params.roles is required",
+      "params.owner is required",
+      "handlers.noSelfGrant is required",
     ]);
   });
 
@@ -35,7 +35,7 @@ describe("verify", () => {
     const found = problems(() =>
       verify(artifact, {
         params: { ...params, extra: [] },
-        handlers: { acyclic, other: () => undefined },
+        handlers: { noSelfGrant, other: () => undefined },
       }),
     );
     expect(found).toEqual([
@@ -45,12 +45,12 @@ describe("verify", () => {
   });
 
   it("rejects a handler that is not a function", () => {
-    const handlers = { acyclic: "no" } as unknown as Record<
+    const handlers = { noSelfGrant: "no" } as unknown as Record<
       string,
       () => undefined
     >;
     expect(problems(() => verify(artifact, { params, handlers }))).toEqual([
-      "handlers.acyclic is required",
+      "handlers.noSelfGrant is required",
     ]);
   });
 });

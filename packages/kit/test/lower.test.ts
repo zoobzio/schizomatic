@@ -7,7 +7,7 @@ import type { Document, JsonObject } from "../src";
 import type { Node } from "@schizomatic/contract";
 
 const basic = resolve(import.meta.dirname, "fixtures/basic/src/index.json");
-const tokens = resolve(import.meta.dirname, "fixtures/tokens/src/index.json");
+const access = resolve(import.meta.dirname, "fixtures/access/src/index.json");
 
 /** Makes a document with one def `a` and one kind `a`. */
 const one = (schema: JsonObject | boolean, ext: JsonObject = {}): Document => ({
@@ -325,26 +325,26 @@ describe("lower fixtures", () => {
     expect(contract.handlers).toEqual([]);
   });
 
-  it("lowers the tokens fixture with its params and handler", () => {
-    const { contract, problems } = lower(load(tokens), "tokens");
+  it("lowers the access fixture with its params and handler", () => {
+    const { contract, problems } = lower(load(access), "access");
     expect(problems).toEqual([]);
     expect(Object.keys(contract.params)).toEqual([
-      "tokens",
-      "modifiers",
-      "contexts",
-      "types",
+      "roles",
+      "resources",
+      "actions",
+      "owner",
     ]);
-    expect(contract.handlers).toEqual(["acyclic"]);
-    expect(contract.defs.contexts).toMatchObject({
+    expect(contract.handlers).toEqual(["noSelfGrant"]);
+    expect(contract.defs.permissions).toMatchObject({
       t: "object",
       keys: {
-        subset: { param: "contexts", at: "$key" },
-        superset: { param: "contexts", at: "$key" },
+        subset: { param: "actions", at: "$key" },
+        superset: { param: "actions", at: "$key" },
       },
     });
-    expect(contract.defs.overrides).toMatchObject({
+    expect(contract.defs.bindings).toMatchObject({
       t: "custom",
-      id: "acyclic",
+      id: "noSelfGrant",
     });
   });
 });

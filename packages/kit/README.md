@@ -115,20 +115,21 @@ The `x-schizomatic` key of a schema adds what JSON Schema cannot say.
 
 A param is a set or a map that the service binds at boot. A schema that reads
 a param resolves when `make` runs. This is how a schema parameterized by
-data, such as a token contract, becomes one artifact with generic types.
+data, such as the role names of an app, becomes one artifact with generic
+types.
 
 ```json
 {
   "x-schizomatic": {
     "params": {
-      "tokens": { "kind": "set" },
-      "modifiers": { "kind": "set" },
-      "contexts": { "kind": "map", "keys": "modifiers", "of": "set" },
-      "types": {
+      "roles": { "kind": "set" },
+      "resources": { "kind": "set" },
+      "actions": { "kind": "map", "keys": "resources", "of": "set" },
+      "owner": {
         "kind": "map",
-        "keys": "tokens",
+        "keys": "roles",
         "of": "enum",
-        "values": ["color", "dimension"]
+        "values": ["person", "service"]
       }
     }
   }
@@ -147,7 +148,7 @@ A schema reads a param with these extension members:
   gives the value schema for each enum value. The value at a key uses the
   schema for the map value of the key.
 
-A set reference is a set param name, or `{ "param": "contexts", "at": "$key" }`
+A set reference is a set param name, or `{ "param": "actions", "at": "$key" }`
 to index a map of sets by the key of the enclosing entry. A def that reads
 `$key` becomes a factory of the key in the artifact and takes `K extends
 string` in the declaration.
@@ -161,10 +162,10 @@ import { makeService } from "@schizomatic/core";
 import artifact, { type Kinds } from "./schema/index.mjs";
 
 type P = {
-  tokens: "primary" | "surface";
-  modifiers: "color";
-  contexts: { color: "light" | "dark" };
-  types: Record<string, string>;
+  roles: "admin" | "viewer";
+  resources: "doc";
+  actions: { doc: "read" | "write" };
+  owner: Record<string, string>;
 };
 
 const schema = makeService<Kinds<P>>(artifact, { params, handlers });

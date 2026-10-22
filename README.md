@@ -14,9 +14,9 @@ module**, and **declarations**.
   that imports a type gets one object literal type, not an inferred tree.
 
 A contract can declare **params**: named sets and maps that a service binds at
-boot. A rule that reads a param resolves when the service compiles. This is
-how a schema parameterized by data, such as a token contract, becomes one
-contract with generic types.
+boot. A rule that reads a param resolves when the service starts. This is how
+a schema parameterized by data, such as a set of role names that only the app
+knows, becomes one artifact with generic types.
 
 ## Anatomy
 

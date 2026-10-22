@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "x-schizomatic": {
+    "params": {
+      "roles": { "kind": "set" },
+      "resources": { "kind": "set" },
+      "actions": { "kind": "map", "keys": "resources", "of": "set" },
+      "owner": {
+        "kind": "map",
+        "keys": "roles",
+        "of": "enum",
+        "values": ["person", "service"]
+      }
+    },
+    "kinds": {
+      "role": "role",
+      "mention": "mention",
+      "principal": "principal",
+      "assignment": "assignment",
+      "bindings": "bindings",
+      "roster": "roster",
+      "matrix": "matrix",
+      "defaults": "defaults",
+      "priority": "priority",
+      "policy": "policy",
+      "amendment": "amendment"
+    }
+  },
+  "$defs": {
+    "role": {
+      "type": "string",
+      "x-schizomatic": { "member": "roles" },
+      "description": "The name of a role."
+    },
+    "mention": {
+      "type": "string",
+      "pattern": "^<.+>$",
+      "x-schizomatic": {
+        "member": "roles",
+        "slice": [1, -1],
+        "ts": "`<${P[\"roles\"]}>`"
+      }
+    },
+    "personMention": {
+      "type": "string",
+      "x-schizomatic": {
+        "member": "roles",
+        "slice": [1, -1],
+        "typed": { "param": "owner", "equals": "person" },
+        "ts": "`<${P[\"roles\"]}>`"
+      }
+    },
+    "person": {
+      "type": "object",
+      "properties": { "email": { "type": "string", "format": "email" } },
+      "required": ["email"],
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "ttl": { "enum": ["1h", "1d"] }
+      },
+      "required": ["key", "ttl"],
+      "additionalProperties": false
+    },
+    "personGrant": {
+      "anyOf": [
+        { "$ref": "#/$defs/personMention" },
+        { "$ref": "#/$defs/person" }
+      ]
+    },
+    "principal": {
+      "anyOf": [{ "$ref": "#/$defs/person" }, { "$ref": "#/$defs/service" }]
+    },
+    "grant": {
+      "anyOf": [{ "$ref": "#/$defs/mention" }, { "$ref": "#/$defs/principal" }]
+    },
+    "assignment": {
+      "type": "object",
+      "properties": {
+        "kind": { "enum": ["person", "service"] },
+        "grant": { "$ref": "#/$defs/grant" },
+        "note": { "type": "string" }
+      },
+      "required": ["kind", "grant"],
+      "additionalProperties": false
+    },
+    "bindings": {
+      "type": "object",
+      "x-schizomatic": {
+        "keys": { "subset": "roles" },
+        "valueBy": {
+          "param": "owner",
+          "schemas": {
+            "person": { "$ref": "#/$defs/personGrant" },
+            "service": {
+              "anyOf": [
+                { "$ref": "#/$defs/mention" },
+                { "$ref": "#/$defs/service" }
+              ]
+            }
+          }
+        },
+        "check": "noSelfGrant"
+      }
+    },
+    "roster": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/assignment" },
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^;<>]+$"
+      },
+      "x-schizomatic": { "keys": { "exact": "roles" } }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/bindings" },
+      "x-schizomatic": {
+        "keys": { "exact": { "param": "actions", "at": "$key" } }
+      }
+    },
+    "matrix": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/permissions" },
+      "x-schizomatic": { "keys": { "exact": "resources" } }
+    },
+    "partialPermissions": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/bindings" },
+      "x-schizomatic": {
+        "keys": { "subset": { "param": "actions", "at": "$key" } }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "x-schizomatic": { "member": { "param": "actions", "at": "$key" } }
+      },
+      "x-schizomatic": { "keys": { "exact": "resources" } }
+    },
+    "priority": {
+      "type": "array",
+      "items": { "type": "string", "x-schizomatic": { "member": "resources" } },
+      "uniqueItems": true,
+      "x-schizomatic": { "exhaustive": "resources" }
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "roster": { "$ref": "#/$defs/roster" },
+        "matrix": { "$ref": "#/$defs/matrix" },
+        "priority": { "$ref": "#/$defs/priority" }
+      },
+      "required": ["id", "name", "roster", "matrix", "priority"],
+      "additionalProperties": false
+    },
+    "amendment": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "roster": { "$ref": "#/$defs/bindings" },
+        "matrix": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/partialPermissions" },
+          "x-schizomatic": { "keys": { "subset": "resources" } }
+        },
+        "priority": { "$ref": "#/$defs/priority" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -15,23 +15,23 @@ describe("contract", () => {
   });
 
   it("types a contract with a param and a ref", () => {
-    const token: Node = { t: "member", param: "tokens" };
+    const role: Node = { t: "member", param: "roles" };
     const contract: Contract = {
       id: "demo",
       version: VERSION,
-      params: { tokens: { kind: "set" } },
+      params: { roles: { kind: "set" } },
       defs: {
-        token,
-        overrides: {
+        role,
+        bindings: {
           t: "object",
           fields: {},
           extra: "strict",
-          keys: { subset: "tokens" },
+          keys: { subset: "roles" },
         },
       },
-      kinds: { token: "token", overrides: "overrides" },
+      kinds: { role: "role", bindings: "bindings" },
       handlers: [],
     };
-    expect(contract.kinds.token).toBe("token");
+    expect(contract.kinds.role).toBe("role");
   });
 });

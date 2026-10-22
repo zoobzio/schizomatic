@@ -12,7 +12,7 @@ import type { Output } from "../src";
 
 const fixtures = resolve(import.meta.dirname, "fixtures");
 const basicRoot = resolve(fixtures, "basic");
-const tokensRoot = resolve(fixtures, "tokens");
+const accessRoot = resolve(fixtures, "access");
 
 /** Imports the built artifact of a fixture. */
 const artifactOf = async (root: string): Promise<Artifact> => {
@@ -37,11 +37,11 @@ const prove = (root: string): string => {
 };
 
 let basic: Output;
-let tokens: Output;
+let access: Output;
 
 beforeAll(async () => {
   basic = await build({ root: basicRoot });
-  tokens = await build({ root: tokensRoot });
+  access = await build({ root: accessRoot });
 }, 60_000);
 
 describe("build", () => {
@@ -61,7 +61,7 @@ describe("build", () => {
   });
 
   it("bundles zod into the artifact so it imports nothing", () => {
-    for (const output of [basic, tokens]) {
+    for (const output of [basic, access]) {
       const code = readFileSync(resolve(output.outDir, ARTIFACT), "utf8");
       expect(code).not.toMatch(/^import /m);
       expect(code).not.toMatch(/from "zod/);
@@ -71,7 +71,7 @@ describe("build", () => {
 
   it("proves the declarations with tsc", () => {
     expect(prove(basicRoot)).toBe("");
-    expect(prove(tokensRoot)).toBe("");
+    expect(prove(accessRoot)).toBe("");
   }, 60_000);
 });
 
@@ -153,88 +153,86 @@ describe("basic artifact", () => {
   });
 });
 
-describe("tokens artifact", () => {
+describe("access artifact", () => {
   type Kinds = Record<
-    | "token"
-    | "reference"
-    | "value"
-    | "definition"
-    | "overrides"
-    | "tokens"
-    | "modifiers"
-    | "input"
-    | "order"
-    | "theme"
-    | "patch",
+    | "role"
+    | "mention"
+    | "principal"
+    | "assignment"
+    | "bindings"
+    | "roster"
+    | "matrix"
+    | "defaults"
+    | "priority"
+    | "policy"
+    | "amendment",
     unknown
   >;
   let schema: Service<Kinds>;
   const params = {
-    tokens: ["primary", "surface", "space"],
-    modifiers: ["color", "motion"],
-    contexts: { color: ["light", "dark"], motion: ["full", "reduced"] },
-    types: { primary: "color", surface: "color", space: "dimension" },
+    roles: ["admin", "viewer", "bot"],
+    resources: ["doc", "bucket"],
+    actions: { doc: ["read", "write"], bucket: ["list", "put"] },
+    owner: { admin: "person", viewer: "person", bot: "service" },
   };
-  const acyclic: Handler = (v) => {
-    for (const [name, bound] of Object.entries(v as Record<string, unknown>)) {
-      if (bound === `{${name}}`) {
-        return { message: "A token references itself.", path: [name] };
+  const noSelfGrant: Handler = (v) => {
+    for (const [role, grant] of Object.entries(v as Record<string, unknown>)) {
+      if (grant === `<${role}>`) {
+        return { message: "A role grants itself.", path: [role] };
       }
     }
     return undefined;
   };
-  const red = { hex: "#ff0000" };
-  const px = { value: 4, unit: "px" };
+  const alice = { email: "alice@example.com" };
+  const key = { key: "k", ttl: "1h" };
 
   beforeAll(async () => {
-    const artifact = await artifactOf(tokensRoot);
-    expect(artifact.params).toEqual([
-      "tokens",
-      "modifiers",
-      "contexts",
-      "types",
-    ]);
-    expect(artifact.handlers).toEqual(["acyclic"]);
-    schema = makeService<Kinds>(artifact, { params, handlers: { acyclic } });
+    const artifact = await artifactOf(accessRoot);
+    expect(artifact.params).toEqual(["roles", "resources", "actions", "owner"]);
+    expect(artifact.handlers).toEqual(["noSelfGrant"]);
+    schema = makeService<Kinds>(artifact, {
+      params,
+      handlers: { noSelfGrant },
+    });
   });
 
   it("reads a set param as an enum and a sliced member", () => {
-    expect(schema.check.token("primary")).toBe(true);
-    expect(schema.check.token("other")).toBe(false);
-    expect(schema.check.reference("{space}")).toBe(true);
-    expect(schema.check.reference("{other}")).toBe(false);
-    expect(schema.check.reference("space")).toBe(false);
+    expect(schema.check.role("admin")).toBe(true);
+    expect(schema.check.role("other")).toBe(false);
+    expect(schema.check.mention("<bot>")).toBe(true);
+    expect(schema.check.mention("<other>")).toBe(false);
+    expect(schema.check.mention("bot")).toBe(false);
   });
 
-  it("picks the value by the type of the key and checks a typed reference", () => {
-    expect(schema.check.overrides({ primary: red, space: px })).toBe(true);
-    expect(schema.check.overrides({ primary: px })).toBe(false);
-    expect(schema.check.overrides({ primary: "{surface}" })).toBe(true);
-    expect(schema.check.overrides({ primary: "{space}" })).toBe(false);
-    expect(schema.check.overrides({ other: red })).toBe(false);
+  it("picks the value by the map value of the key and checks a typed member", () => {
+    expect(schema.check.bindings({ admin: alice, bot: key })).toBe(true);
+    expect(schema.check.bindings({ admin: key })).toBe(false);
+    expect(schema.check.bindings({ admin: "<viewer>" })).toBe(true);
+    expect(schema.check.bindings({ admin: "<bot>" })).toBe(false);
+    expect(schema.check.bindings({ other: alice })).toBe(false);
   });
 
   it("runs the handler and keeps its path", () => {
-    const result = schema.inspect.overrides({ primary: "{primary}" });
+    const result = schema.inspect.bindings({ admin: "<admin>" });
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.issues.map((issue) => [issue.message, issue.path])).toEqual(
-        [["A token references itself.", ["primary"]]],
+        [["A role grants itself.", ["admin"]]],
       );
     }
   });
 
-  it("requires every token in the complete map and checks the names", () => {
-    const tokens = {
-      primary: { $type: "color", $value: red },
-      surface: { $type: "color", $value: "{primary}" },
-      space: { $type: "dimension", $value: px },
+  it("requires every role in the roster and checks the names", () => {
+    const roster = {
+      admin: { kind: "person", grant: alice },
+      viewer: { kind: "person", grant: "<admin>" },
+      bot: { kind: "service", grant: key },
     };
-    expect(schema.check.tokens(tokens)).toBe(true);
-    expect(schema.check.tokens({ primary: tokens.primary })).toBe(false);
-    const result = schema.inspect.tokens({
-      ...tokens,
-      "bad;name": tokens.primary,
+    expect(schema.check.roster(roster)).toBe(true);
+    expect(schema.check.roster({ admin: roster.admin })).toBe(false);
+    const result = schema.inspect.roster({
+      ...roster,
+      "bad;name": roster.admin,
     });
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -242,62 +240,54 @@ describe("tokens artifact", () => {
     }
   });
 
-  it("checks the contexts of each modifier by the enclosing key", () => {
+  it("checks the actions of each resource by the enclosing key", () => {
+    const full = {
+      doc: { read: {}, write: { admin: alice } },
+      bucket: { list: {}, put: {} },
+    };
+    expect(schema.check.matrix(full)).toBe(true);
     expect(
-      schema.check.modifiers({
-        color: { light: {}, dark: { primary: red } },
-        motion: { full: {}, reduced: {} },
+      schema.check.matrix({
+        ...full,
+        bucket: { list: {}, put: {}, extra: {} },
       }),
+    ).toBe(false);
+    expect(schema.check.matrix({ ...full, doc: { read: {} } })).toBe(false);
+    expect(schema.check.matrix({ doc: full.doc })).toBe(false);
+    expect(
+      schema.check.matrix({
+        ...full,
+        doc: { read: {}, write: { admin: key } },
+      }),
+    ).toBe(false);
+  });
+
+  it("checks the defaults by the enclosing key", () => {
+    expect(schema.check.defaults({ doc: "write", bucket: "list" })).toBe(true);
+    expect(schema.check.defaults({ doc: "list", bucket: "list" })).toBe(false);
+    expect(schema.check.defaults({ doc: "write" })).toBe(false);
+  });
+
+  it("requires the priority to be a permutation of the resources", () => {
+    expect(schema.check.priority(["bucket", "doc"])).toBe(true);
+    expect(schema.check.priority(["doc"])).toBe(false);
+    expect(schema.check.priority(["doc", "doc", "bucket"])).toBe(false);
+    expect(schema.check.priority(["doc", "bucket", "other"])).toBe(false);
+  });
+
+  it("checks a partial amendment with a subset of actions", () => {
+    expect(
+      schema.check.amendment({ matrix: { doc: { write: { admin: alice } } } }),
     ).toBe(true);
-    expect(
-      schema.check.modifiers({
-        color: { light: {}, dark: {} },
-        motion: { full: {}, reduced: {}, extra: {} },
-      }),
-    ).toBe(false);
-    expect(
-      schema.check.modifiers({
-        color: { light: {} },
-        motion: { full: {}, reduced: {} },
-      }),
-    ).toBe(false);
-    expect(schema.check.modifiers({ color: { light: {}, dark: {} } })).toBe(
+    expect(schema.check.amendment({ matrix: { doc: { delete: {} } } })).toBe(
       false,
     );
     expect(
-      schema.check.modifiers({
-        color: { light: {}, dark: { primary: px } },
-        motion: { full: {}, reduced: {} },
-      }),
-    ).toBe(false);
-  });
-
-  it("checks the input by the enclosing key", () => {
-    expect(schema.check.input({ color: "dark", motion: "full" })).toBe(true);
-    expect(schema.check.input({ color: "full", motion: "full" })).toBe(false);
-    expect(schema.check.input({ color: "dark" })).toBe(false);
-  });
-
-  it("requires the order to be a permutation of the modifiers", () => {
-    expect(schema.check.order(["motion", "color"])).toBe(true);
-    expect(schema.check.order(["color"])).toBe(false);
-    expect(schema.check.order(["color", "color", "motion"])).toBe(false);
-    expect(schema.check.order(["color", "motion", "other"])).toBe(false);
-  });
-
-  it("checks a partial patch with a subset of contexts", () => {
-    expect(
-      schema.check.patch({ modifiers: { color: { dark: { primary: red } } } }),
-    ).toBe(true);
-    expect(schema.check.patch({ modifiers: { color: { blue: {} } } })).toBe(
-      false,
-    );
-    expect(
-      schema.check.patch({
-        tokens: { primary: red },
-        order: ["motion", "color"],
+      schema.check.amendment({
+        roster: { admin: alice },
+        priority: ["bucket", "doc"],
       }),
     ).toBe(true);
-    expect(schema.check.patch({ extra: 1 })).toBe(false);
+    expect(schema.check.amendment({ extra: 1 })).toBe(false);
   });
 });

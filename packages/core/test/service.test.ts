@@ -42,8 +42,8 @@ describe("check", () => {
   });
 
   it("reads a set param", () => {
-    expect(schema.check.token("primary")).toBe(true);
-    expect(schema.check.token("other")).toBe(false);
+    expect(schema.check.role("admin")).toBe(true);
+    expect(schema.check.role("other")).toBe(false);
   });
 });
 
@@ -78,7 +78,7 @@ describe("parse", () => {
   });
 
   it("throws a SchemaError for an invalid value", () => {
-    expect(() => schema.parse.order(["primary", "primary"])).toThrow(
+    expect(() => schema.parse.priority(["admin", "admin"])).toThrow(
       SchemaError,
     );
   });
@@ -86,49 +86,42 @@ describe("parse", () => {
 
 describe("inspect", () => {
   it("returns a success result with the data", () => {
-    const result = schema.inspect.order(["primary", "surface", "space"]);
-    expect(result).toEqual({
-      success: true,
-      data: ["primary", "surface", "space"],
-    });
+    const result = schema.inspect.priority(["admin", "viewer", "bot"]);
+    expect(result).toEqual({ success: true, data: ["admin", "viewer", "bot"] });
   });
 
   it("returns a failure result with the issues", () => {
-    const result = schema.inspect.order(["primary"]);
+    const result = schema.inspect.priority(["admin"]);
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.issues[0]?.message).toBe("Order must list every token.");
+      expect(result.issues[0]?.message).toBe("Priority must list every role.");
     }
   });
 });
 
 describe("params and handlers", () => {
   it("picks the value shape of a key from a map param", () => {
-    expect(schema.check.overrides({ primary: { hex: "#ff0000" } })).toBe(true);
-    expect(schema.check.overrides({ space: { value: 4, unit: "px" } })).toBe(
-      true,
-    );
-    const result = schema.inspect.overrides({
-      primary: { value: 4, unit: "px" },
-    });
+    expect(schema.check.bindings({ admin: { email: "a@b.co" } })).toBe(true);
+    expect(schema.check.bindings({ bot: { key: "k", ttl: "1h" } })).toBe(true);
+    const result = schema.inspect.bindings({ admin: { key: "k", ttl: "1h" } });
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.issues[0]?.path).toEqual(["primary", "hex"]);
+      expect(result.issues[0]?.path).toEqual(["admin", "email"]);
     }
   });
 
   it("rejects a key outside the set param", () => {
-    expect(schema.check.overrides({ other: { hex: "#ff0000" } })).toBe(false);
+    expect(schema.check.bindings({ other: { email: "a@b.co" } })).toBe(false);
   });
 
   it("runs a named handler and keeps its path", () => {
-    const result = schema.inspect.overrides({ primary: "{cycle}" });
+    const result = schema.inspect.bindings({ admin: "<admin>" });
     expect(result.success).toBe(false);
     if (!result.success) {
       const found = result.issues.find(
-        (issue) => issue.message === "Overrides form a cycle.",
+        (issue) => issue.message === "A role grants itself.",
       );
-      expect(found?.path).toEqual(["primary"]);
+      expect(found?.path).toEqual(["admin"]);
     }
   });
 });

@@ -27,7 +27,7 @@ const prop = (name: string): string =>
   /^[A-Za-z_$][\w$]*$/.test(name) ? name : q(name);
 
 /**
- * Makes a type name from a def name. `color.bg` becomes `ColorBg`.
+ * Makes a type name from a def name. `audit.log` becomes `AuditLog`.
  */
 export const typeName = (name: string): string => {
   const words = name.split(/[^A-Za-z0-9]+/).filter((word) => word !== "");

@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import { declaration, load, lowerOrThrow, typeName } from "../src";
 
-const tokens = lowerOrThrow(
-  load(resolve(import.meta.dirname, "fixtures/tokens/src/index.json")),
-  "tokens",
+const access = lowerOrThrow(
+  load(resolve(import.meta.dirname, "fixtures/access/src/index.json")),
+  "access",
 );
 const basic = lowerOrThrow(
   load(resolve(import.meta.dirname, "fixtures/basic/src/index.json")),
@@ -15,8 +15,8 @@ const basic = lowerOrThrow(
 describe("typeName", () => {
   it("makes a Pascal case name from a def name", () => {
     expect(typeName("user")).toBe("User");
-    expect(typeName("color.bg")).toBe("ColorBg");
-    expect(typeName("partial-contexts")).toBe("PartialContexts");
+    expect(typeName("audit.log")).toBe("AuditLog");
+    expect(typeName("partial-permissions")).toBe("PartialPermissions");
     expect(typeName("1st")).toBe("_1st");
   });
 });
@@ -46,43 +46,43 @@ describe("declaration", () => {
   });
 
   it("writes a Params type and generic defs when the contract has params", () => {
-    const found = declaration(tokens);
+    const found = declaration(access);
     expect(found).toContain(
-      "export type Params = {\n  tokens: string;\n  modifiers: string;\n  contexts: Record<string, string>;\n  types: Record<string, string>;\n};",
+      "export type Params = {\n  roles: string;\n  resources: string;\n  actions: Record<string, string>;\n  owner: Record<string, string>;\n};",
     );
     expect(found).toContain(
-      'export type Token<P extends Params = Params> = P["tokens"];',
+      'export type Role<P extends Params = Params> = P["roles"];',
     );
     expect(found).toContain(
-      'export type Reference<P extends Params = Params> = `{${P["tokens"]}}`;',
+      'export type Mention<P extends Params = Params> = `<${P["roles"]}>`;',
     );
-    expect(found).toContain("export type Color = {\n  hex: string;\n};");
+    expect(found).toContain("export type Person = {\n  email: string;\n};");
     expect(found).toContain(
-      'export type Overrides<P extends Params = Params> = { [K0 in P["tokens"]]?: ColorValue<P> | Reference<P> | Dimension };',
-    );
-    expect(found).toContain(
-      'export type Tokens<P extends Params = Params> = { [K0 in P["tokens"]]: Definition<P> };',
+      'export type Bindings<P extends Params = Params> = { [K0 in P["roles"]]?: PersonGrant<P> | Mention<P> | Service };',
     );
     expect(found).toContain(
-      'export type Order<P extends Params = Params> = P["modifiers"][];',
+      'export type Roster<P extends Params = Params> = { [K0 in P["roles"]]: Assignment<P> };',
+    );
+    expect(found).toContain(
+      'export type Priority<P extends Params = Params> = P["resources"][];',
     );
   });
 
   it("gives a scoped def a key parameter and passes the mapped key at the ref", () => {
-    const found = declaration(tokens);
+    const found = declaration(access);
     expect(found).toContain(
-      'export type Contexts<P extends Params = Params, K extends string = string> = { [K0 in P["contexts"][K]]: Overrides<P> };',
+      'export type Permissions<P extends Params = Params, K extends string = string> = { [K0 in P["actions"][K]]: Bindings<P> };',
     );
     expect(found).toContain(
-      'export type Modifiers<P extends Params = Params> = { [K0 in P["modifiers"]]: Contexts<P, K0> };',
+      'export type Matrix<P extends Params = Params> = { [K0 in P["resources"]]: Permissions<P, K0> };',
     );
     expect(found).toContain(
-      'export type Input<P extends Params = Params> = { [K0 in P["modifiers"]]: P["contexts"][K0] };',
+      'export type Defaults<P extends Params = Params> = { [K0 in P["resources"]]: P["actions"][K0] };',
     );
-    expect(found).toContain("  modifiers: Modifiers<P>;");
+    expect(found).toContain("  matrix: Matrix<P>;");
     expect(found).toContain(
-      "export type Kinds<P extends Params = Params> = {\n  token: Token<P>;",
+      "export type Kinds<P extends Params = Params> = {\n  role: Role<P>;",
     );
-    expect(found).toContain("  value: Value;\n");
+    expect(found).toContain("  principal: Principal;\n");
   });
 });

@@ -1,13 +1,13 @@
 import { resolve } from "node:path";
 
+import type { Contract } from "@schizomatic/contract";
 import { describe, expect, it } from "vitest";
 
 import { KitError, load, lowerOrThrow, zodSource } from "../src";
-import type { Contract } from "@schizomatic/contract";
 
-const tokens = lowerOrThrow(
-  load(resolve(import.meta.dirname, "fixtures/tokens/src/index.json")),
-  "tokens",
+const access = lowerOrThrow(
+  load(resolve(import.meta.dirname, "fixtures/access/src/index.json")),
+  "access",
 );
 const basic = lowerOrThrow(
   load(resolve(import.meta.dirname, "fixtures/basic/src/index.json")),
@@ -52,8 +52,7 @@ describe("zodSource", () => {
   });
 
   it("uses z.lazy for a recursive def", () => {
-    const source = zodSource(basic);
-    expect(source).toContain('z.lazy(() => D["tree"])');
+    expect(zodSource(basic)).toContain('z.lazy(() => D["tree"])');
   });
 
   it("emits each scalar and composite", () => {
@@ -79,37 +78,37 @@ describe("zodSource", () => {
   });
 
   it("binds set params and reads them as enums", () => {
-    const source = zodSource(tokens);
-    expect(source).toContain('"tokens": new Set(params["tokens"]),');
-    expect(source).toContain('D["token"] = z.enum(params["tokens"]);');
+    const source = zodSource(access);
+    expect(source).toContain('"roles": new Set(params["roles"]),');
+    expect(source).toContain('D["role"] = z.enum(params["roles"]);');
     expect(source).toContain(
-      '$member(S["tokens"], [1,-1], undefined, undefined)',
+      '$member(S["roles"], [1,-1], undefined, undefined)',
     );
     expect(source).toContain(
-      '$member(S["tokens"], [1,-1], params["types"], "color")',
+      '$member(S["roles"], [1,-1], params["owner"], "person")',
     );
   });
 
   it("emits a scoped def as a factory of the key and passes the key at the ref", () => {
-    const source = zodSource(tokens);
+    const source = zodSource(access);
     expect(source).toContain(
-      'D["contexts"] = (k) => z.catchall(z.looseObject({}), D["overrides"]).check($subset($setOf(params["contexts"], k)), $superset($setOf(params["contexts"], k)));',
+      'D["permissions"] = (k) => z.catchall(z.looseObject({}), D["bindings"]).check($subset($setOf(params["actions"], k)), $superset($setOf(params["actions"], k)));',
     );
     expect(source).toContain(
-      'D["modifiers"] = z.looseObject({}).check($keyed((k) => D["contexts"](k)), $subset(S["modifiers"]), $superset(S["modifiers"]));',
+      'D["matrix"] = z.looseObject({}).check($keyed((k) => D["permissions"](k)), $subset(S["resources"]), $superset(S["resources"]));',
     );
     expect(source).toContain(
-      '$keyed((k) => z.enum((params["contexts"][k] ?? [])))',
+      '$keyed((k) => z.enum((params["actions"][k] ?? [])))',
     );
   });
 
   it("emits valueBy factories, the exhaustive check, and the handler", () => {
-    const source = zodSource(tokens);
+    const source = zodSource(access);
     expect(source).toContain(
-      '$valueBy(params["types"], { "color": (k) => D["colorValue"], "dimension": (k) => z.union([D["reference"], D["dimension"]]) })',
+      '$valueBy(params["owner"], { "person": (k) => D["personGrant"], "service": (k) => z.union([D["mention"], D["service"]]) })',
     );
-    expect(source).toContain('$exhaustive(S["modifiers"])');
-    expect(source).toContain('.check($handler(handlers["acyclic"]))');
+    expect(source).toContain('$exhaustive(S["resources"])');
+    expect(source).toContain('.check($handler(handlers["noSelfGrant"]))');
   });
 
   it("rejects a kind that points to a scoped def", () => {
