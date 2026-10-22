@@ -1,8 +1,11 @@
 # @schizomatic/core
 
-The runtime. The package compiles a contract to a service. The service has a
-`check`, an `assert`, a `parse`, and an `inspect` for each kind of the
-contract. The package has no dependency on zod or on any schema library.
+The runtime service over a built artifact. The service has a `check`, an
+`assert`, a `parse`, and an `inspect` for each kind of the artifact.
+
+The artifact is the `index.mjs` that [`@schizomatic/kit`](../kit) writes. It
+carries its own copy of zod. This package calls `safeParse` on each validator
+and nothing else. This package has no dependency on zod.
 
 ## Install
 
@@ -14,23 +17,37 @@ pnpm add @schizomatic/core
 
 ```ts
 import { makeService } from "@schizomatic/core";
-import type { Kinds } from "./schema/index.mjs";
 
-import contract from "./schema/contract.json" with { type: "json" };
+import artifact, { type Kinds } from "./schema/index.mjs";
 
-const schema = makeService<Kinds>(contract, {
+const schema = makeService<Kinds>(artifact, {
   params: { tokens: ["primary", "surface"] },
   handlers: { acyclic },
 });
 
-schema.check.user(value); // boolean, narrows value
-schema.assert.user(value); // throws SchemaError with every Issue
-schema.parse.user(value); // returns the narrowed value
+schema.check.user(value); // boolean, narrows value to Kinds["user"]
+schema.assert.user(value); // throws SchemaError with every issue
+schema.parse.user(value); // returns the output, with defaults filled
 schema.inspect.user(value); // { success, data } or { success, issues }
 ```
 
+## The artifact
+
+An artifact declares its `id`, its `kinds`, its `params`, and its `handlers`.
+Its `make(params, handlers)` returns one validator for each kind. A validator
+has `safeParse`. A zod schema is a validator, so a hand-written zod schema can
+stand in for an artifact in a test.
+
+- A **param** is a set or a map that the service binds at boot. A kind that
+  reads a param, such as an enum over token names, resolves when `make` runs.
+- A **handler** is a named check. The artifact calls it inside a zod `check`.
+
+`makeService` checks the options against the declaration of the artifact
+before it calls `make`. A missing param or a missing handler throws an
+`ArtifactError` that lists every problem.
+
 ## Related
 
-- [`@schizomatic/contract`](../contract) is the contract format.
-- [`@schizomatic/kit`](../kit) writes a compiled module that targets the atoms
-  of this package.
+- [`@schizomatic/kit`](../kit) builds the artifact from JSON Schema.
+- [`@schizomatic/contract`](../contract) is the contract format that the kit
+  writes beside the artifact.

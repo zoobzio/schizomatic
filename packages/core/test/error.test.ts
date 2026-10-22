@@ -1,16 +1,31 @@
 import { describe, expect, it } from "vitest";
 
-import { SchemaError } from "../src";
+import { ArtifactError, SchemaError } from "../src";
 
 describe("SchemaError", () => {
   it("holds every issue and names the path in the message", () => {
     const error = new SchemaError([
-      { code: "not_string", message: "id must be a string." },
-      { code: "missing_key", message: "name is required.", path: ["user", 0] },
+      { code: "invalid_type", message: "Expected string.", path: [] },
+      { code: "too_small", message: "Too small.", path: ["user", 0] },
     ]);
     expect(error.name).toBe("SchemaError");
     expect(error.issues).toHaveLength(2);
-    expect(error.message).toContain("id must be a string.");
-    expect(error.message).toContain("name is required. at user.0");
+    expect(error.message).toContain("  Expected string.\n");
+    expect(error.message).toContain("  Too small. at user.0");
+  });
+});
+
+describe("ArtifactError", () => {
+  it("names the artifact and lists every problem", () => {
+    const error = new ArtifactError("demo", [
+      "params.a is required",
+      "handlers.b is required",
+    ]);
+    expect(error.name).toBe("ArtifactError");
+    expect(error.problems).toHaveLength(2);
+    expect(error.message).toContain('"demo"');
+    expect(error.message).toContain(
+      "  params.a is required\n  handlers.b is required",
+    );
   });
 });

@@ -66,13 +66,23 @@ export type Node = Hint &
     | { t: "unknown" }
     | { t: "literal"; value: string | number | boolean | null }
     | { t: "enum"; values: (string | number)[] }
-    | { t: "array"; item: Node; min?: number; max?: number; unique?: boolean }
+    | {
+        t: "array";
+        item: Node;
+        min?: number;
+        max?: number;
+        unique?: boolean;
+        /* The items must cover every member of a set param. */
+        exhaustive?: string;
+      }
     | { t: "tuple"; items: Node[]; rest?: Node }
     | {
         t: "object";
         fields: Record<string, Field>;
         extra: "strip" | "strict" | "passthrough";
         catchall?: Node;
+        /* A node that each key must match. */
+        names?: Node;
         /* The keys must be a subset, a superset, or exactly the members of a set param. */
         keys?: { subset?: string; superset?: string };
         /* The value schema for a key comes from a map param. */
